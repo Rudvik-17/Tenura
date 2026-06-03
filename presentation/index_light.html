@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tenura — Demo Presentation</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    /* === Tenura Design Tokens ("The Precision Atelier") === */
+    :root {
+      --primary: #002045;
+      --primaryContainer: #1a365d;
+      --primaryFixed: #d6e3ff;
+      --primaryFixedDim: #adc7f7;
+      --onPrimary: #ffffff;
+      --onPrimaryContainer: #86a0cd;
+
+      --secondary: #505f76;
+      --secondaryContainer: #d0e1fb;
+
+      --tertiaryFixedDim: #68dba9;
+      --onTertiary: #ffffff;
+
+      --surface: #f7f9fb;
+      --surfaceBright: #f7f9fb;
+      --surfaceContainerLow: #f2f4f6;
+      --surfaceContainer: #eceef0;
+      --surfaceContainerHigh: #e6e8ea;
+      --surfaceContainerHighest: #e0e3e5;
+      --surfaceContainerLowest: #ffffff;
+      --surfaceDim: #d8dadc;
+
+      --onSurface: #191c1e;
+      --onSurfaceVariant: #43474e;
+
+      --error: #ba1a1a;
+      --errorContainer: #ffdad6;
+
+      --outline: #74777f;
+      --outlineVariant: #c4c6cf;
+
+      --background: #f7f9fb;
+      --onBackground: #191c1e;
+
+      --page-w: 100vw;
+      --page-h: 100vh;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: var(--surface);
+      font-family: 'Inter', sans-serif;
+      color: var(--onSurface);
+    }
+
+    /* === Slide Container === */
+    .presentation {
+      position: relative;
+      width: 100%;
+      height: 100%;
+    }
+
+    .slide {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 60px;
+      opacity: 0;
+      transform: translateY(30px);
+      transition: opacity 0.5s ease, transform 0.5s ease;
+      pointer-events: none;
+      overflow-y: auto;
+    }
+
+    .slide.active {
+      opacity: 1;
+      transform: translateY(0);
+      pointer-events: auto;
+    }
+
+    .slide.exit {
+      opacity: 0;
+      transform: translateY(-30px);
+    }
+
+    /* === Typography === */
+    h1 {
+      font-family: 'Manrope', sans-serif;
+      font-weight: 700;
+      font-size: 48px;
+      line-height: 1.1;
+      letter-spacing: -0.5px;
+      color: var(--primary);
+      margin-bottom: 12px;
+    }
+
+    h2 {
+      font-family: 'Manrope', sans-serif;
+      font-weight: 600;
+      font-size: 32px;
+      line-height: 1.2;
+      color: var(--primary);
+      margin-bottom: 8px;
+    }
+
+    h3 {
+      font-family: 'Manrope', sans-serif;
+      font-weight: 600;
+      font-size: 24px;
+      line-height: 1.3;
+      color: var(--onSurface);
+      margin-bottom: 6px;
+    }
+
+    .subtitle {
+      font-family: 'Manrope', sans-serif;
+      font-weight: 500;
+      font-size: 18px;
+      color: var(--onSurfaceVariant);
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      margin-bottom: 20px;
+    }
+
+    .body-text {
+      font-family: 'Inter', sans-serif;
+      font-weight: 400;
+      font-size: 16px;
+      line-height: 1.6;
+      color: var(--onSurfaceVariant);
+      max-width: 600px;
+      text-align: center;
+    }
+
+    .accent-green {
+      color: #1ba871;
+    }
+
+    /* === Layout Helpers === */
+    .flex-row {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      gap: 40px;
+    }
+
+    .flex-col {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 24px;
+    }
+
+    .text-left { text-align: left; }
+
+    /* === Slides specific styles === */
+
+    /* Slide 0: Title */
+    .slide-title {
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primaryContainer) 100%);
+      color: var(--onPrimary);
+    }
+    .slide-title h1 {
+      color: var(--onPrimary);
+      font-size: 56px;
+    }
+    .slide-title .subtitle {
+      color: var(--primaryFixedDim);
+    }
+    .slide-title .body-text {
+      color: var(--primaryFixedDim);
+    }
+    .meta-chip {
+      display: inline-block;
+      background: rgba(255,255,255,0.1);
+      padding: 8px 20px;
+      border-radius: 8px;
+      font-family: 'Inter', sans-serif;
+      font-weight: 500;
+      font-size: 14px;
+      color: var(--primaryFixedDim);
+      letter-spacing: 0.5px;
+    }
+
+    /* Slide: Feature highlight cards */
+    .feature-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 20px;
+      max-width: 900px;
+      width: 100%;
+    }
+
+    .feature-card {
+      background: var(--surfaceContainerLowest);
+      border-radius: 12px;
+      padding: 24px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+      text-align: left;
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+    .feature-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+    }
+    .feature-card .icon {
+      font-size: 28px;
+      margin-bottom: 12px;
+    }
+    .feature-card .title {
+      font-family: 'Manrope', sans-serif;
+      font-weight: 600;
+      font-size: 18px;
+      color: var(--primary);
+      margin-bottom: 8px;
+    }
+    .feature-card .desc {
+      font-family: 'Inter', sans-serif;
+      font-weight: 400;
+      font-size: 14px;
+      line-height: 1.5;
+      color: var(--onSurfaceVariant);
+    }
+
+    /* Mock phone frame */
+    .phone-frame {
+      width: 240px;
+      height: 480px;
+      background: var(--surface);
+      border-radius: 24px;
+      border: 3px solid var(--surfaceContainerHigh);
+      overflow: hidden;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+      display: flex;
+      flex-direction: column;
+    }
+    .phone-frame img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    /* Stats row */
+    .stats-row {
+      display: flex;
+      gap: 32px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .stat-item {
+      text-align: center;
+    }
+    .stat-value {
+      font-family: 'Manrope', sans-serif;
+      font-weight: 700;
+      font-size: 36px;
+      color: var(--primary);
+      line-height: 1;
+    }
+    .stat-label {
+      font-family: 'Inter', sans-serif;
+      font-weight: 500;
+      font-size: 12px;
+      color: var(--onSurfaceVariant);
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      margin-top: 4px;
+    }
+
+    /* Divider */
+    .divider {
+      width: 40px;
+      height: 3px;
+      background: var(--tertiaryFixedDim);
+      border-radius: 2px;
+      margin: 16px 0;
+    }
+
+    /* Slide indicators */
+    .nav-dots {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 10px;
+      z-index: 100;
+    }
+    .nav-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--surfaceContainerHigh);
+      border: none;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+    .nav-dot.active {
+      background: var(--primary);
+      width: 28px;
+      border-radius: 5px;
+    }
+
+    /* Navigation arrows */
+    .nav-arrow {
+      position: fixed;
+      top: 50%;
+      transform: translateY(-50%);
+      background: var(--surfaceContainerLowest);
+      border: 1px solid var(--surfaceContainer);
+      border-radius: 50%;
+      width: 48px;
+      height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      z-index: 100;
+      font-size: 20px;
+      color: var(--primary);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      transition: all 0.2s ease;
+      user-select: none;
+    }
+    .nav-arrow:hover {
+      background: var(--primary);
+      color: var(--onPrimary);
+    }
+    .nav-arrow.prev { left: 20px; }
+    .nav-arrow.next { right: 20px; }
+
+    /* Animations */
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(24px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to   { opacity: 1; }
+    }
+    @keyframes slideInRight {
+      from { opacity: 0; transform: translateX(40px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+    @keyframes scaleIn {
+      from { opacity: 0; transform: scale(0.92); }
+      to   { opacity: 1; transform: scale(1); }
+    }
+    @keyframes pulseGlow {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(0,32,69,0.1); }
+      50% { box-shadow: 0 0 0 12px rgba(0,32,69,0); }
+    }
+
+    .slide.active .animate-up {
+      animation: fadeInUp 0.6s ease forwards;
+      opacity: 0;
+    }
+    .slide.active .animate-up-d1 { animation-delay: 0.15s; }
+    .slide.active .animate-up-d2 { animation-delay: 0.3s; }
+    .slide.active .animate-up-d3 { animation-delay: 0.45s; }
+    .slide.active .animate-up-d4 { animation-delay: 0.6s; }
+    .slide.active .animate-up-d5 { animation-delay: 0.75s; }
+
+    .slide.active .animate-scale {
+      animation: scaleIn 0.5s ease forwards;
+      opacity: 0;
+    }
+
+    .slide.active .animate-right {
+      animation: slideInRight 0.5s ease forwards;
+      opacity: 0;
+    }
+
+    /* Keyboard shortcut hint */
+    .keyboard-hint {
+      position: fixed;
+      bottom: 60px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-family: 'Inter', sans-serif;
+      font-weight: 400;
+      font-size: 12px;
+      color: var(--outline);
+      z-index: 99;
+      opacity: 0.6;
+    }
+
+    /* Slide counter */
+    .slide-counter {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      font-family: 'Inter', sans-serif;
+      font-weight: 500;
+      font-size: 13px;
+      color: var(--outline);
+      z-index: 100;
+      background: var(--surfaceContainerLowest);
+      padding: 4px 12px;
+      border-radius: 6px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    }
+
+    /* Code/mockup styling */
+    .tech-badge {
+      display: inline-block;
+      background: var(--primaryFixed);
+      color: var(--primary);
+      padding: 6px 16px;
+      border-radius: 8px;
+      font-family: 'Inter', sans-serif;
+      font-weight: 500;
+      font-size: 14px;
+    }
+
+    /* === Responsive === */
+    @media (max-width: 768px) {
+      .slide { padding: 24px; }
+      h1 { font-size: 32px; }
+      .feature-grid { grid-template-columns: 1fr; }
+      .flex-row { flex-direction: column; }
+      .phone-frame { width: 180px; height: 360px; }
+      .nav-arrow { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="presentation" id="presentation">
+
+  <!-- === SLIDE 0: TITLE === -->
+  <div class="slide slide-title active" data-slide="0">
+    <div class="meta-chip animate-up">DEMO · MAY 20, 2026</div>
+    <div style="height:16px"></div>
+    <h1 class="animate-up animate-up-d1">Tenura</h1>
+    <div class="subtitle animate-up animate-up-d2">Property Management, Simplified</div>
+    <div class="divider animate-up animate-up-d3"></div>
+    <p class="body-text animate-up animate-up-d4" style="max-width:500px;">
+      One app for owners and tenants — built with React Native, Expo &amp; Supabase
+    </p>
+    <div style="height:12px"></div>
+    <div class="flex-row" style="gap:12px">
+      <span class="tech-badge animate-up animate-up-d5">⚛ React Native</span>
+      <span class="tech-badge animate-up animate-up-d5">📦 Expo</span>
+      <span class="tech-badge animate-up animate-up-d5">🗄 Supabase</span>
+    </div>
+  </div>
+
+  <!-- === SLIDE 1: THE PROBLEM === -->
+  <div class="slide" data-slide="1">
+    <div class="flex-col">
+      <div class="subtitle animate-up">The Problem</div>
+      <h1 class="animate-up animate-up-d1 text-left" style="max-width:700px; text-align:center;">
+        Property management is fragmented
+      </h1>
+      <div class="divider animate-up animate-up-d2"></div>
+      <div class="stats-row animate-up animate-up-d3" style="margin-top:8px;">
+        <div class="stat-item">
+          <div class="stat-value">4+</div>
+          <div class="stat-label">Apps to manage</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value">₹</div>
+          <div class="stat-label">Paper ledgers</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value">❌</div>
+          <div class="stat-label">No tenant visibility</div>
+        </div>
+      </div>
+      <div style="height:20px"></div>
+      <div class="body-text animate-up animate-up-d4" style="max-width:600px;">
+        Owners juggle Excel sheets, WhatsApp groups, and payment apps.
+        Tenants have no central place to pay rent or raise issues.
+        <br><br>
+        <strong>Tenura replaces all of that with one polished app.</strong>
+      </div>
+    </div>
+  </div>
+
+  <!-- === SLIDE 2: TWO ROLES, ONE APP === -->
+  <div class="slide" data-slide="2">
+    <div class="flex-col">
+      <div class="subtitle animate-up">Architecture</div>
+      <h1 class="animate-up animate-up-d1" style="text-align:center;">
+        Two roles.<br>One codebase.
+      </h1>
+      <div class="divider animate-up animate-up-d2"></div>
+      <div class="flex-row animate-up animate-up-d3" style="gap:60px; margin-top:12px;">
+        <div class="flex-col" style="gap:8px;">
+          <div style="font-size:40px;">👤</div>
+          <h3 style="font-size:20px;">Owner</h3>
+          <p class="body-text" style="font-size:14px; max-width:200px;">
+            Properties · Residents · Finance · Issues
+          </p>
+        </div>
+        <div style="width:2px; height:80px; background:var(--surfaceContainerHigh);"></div>
+        <div class="flex-col" style="gap:8px;">
+          <div style="font-size:40px;">👥</div>
+          <h3 style="font-size:20px;">Tenant</h3>
+          <p class="body-text" style="font-size:14px; max-width:200px;">
+            Dashboard · Payments · Maintenance · Lease
+          </p>
+        </div>
+      </div>
+      <div style="height:16px"></div>
+      <p class="body-text animate-up animate-up-d4" style="font-size:14px; max-width:500px;">
+        Completely different UIs from the same React Native codebase —<br>
+        gated by Supabase Row Level Security.
+      </p>
+    </div>
+  </div>
+
+  <!-- === SLIDE 3: OWNER DASHBOARD === -->
+  <div class="slide" data-slide="3">
+    <div class="flex-row" style="align-items:flex-start; gap:60px;">
+      <div class="flex-col text-left" style="align-items:flex-start; flex:1;">
+        <div class="subtitle animate-up">Owner Experience</div>
+        <h2 class="animate-up animate-up-d1">Dashboard at a glance</h2>
+        <div class="divider animate-up animate-up-d2"></div>
+        <div class="animate-up animate-up-d3" style="display:flex; flex-direction:column; gap:12px; width:100%;">
+          <div class="feature-card" style="padding:16px;">
+            <div class="title" style="font-size:16px;">📊 Portfolio Value</div>
+            <div class="desc">Total property worth in crore/lakh format</div>
+          </div>
+          <div class="feature-card" style="padding:16px;">
+            <div class="title" style="font-size:16px;">💰 MTD Collection</div>
+            <div class="desc">Month-to-date rent collected, live from Supabase</div>
+          </div>
+          <div class="feature-card" style="padding:16px;">
+            <div class="title" style="font-size:16px;">⚠️ Urgent Issues</div>
+            <div class="desc">Highlighted alerts for high-priority maintenance</div>
+          </div>
+        </div>
+      </div>
+      <div class="phone-frame animate-scale animate-up-d3">
+        <img src="../screenshots/02-owner-portfolio.png" alt="Owner Dashboard" />
+      </div>
+    </div>
+  </div>
+
+  <!-- === SLIDE 4: PROPERTY DETAIL + RESIDENTS === -->
+  <div class="slide" data-slide="4">
+    <div class="flex-row" style="align-items:flex-start; gap:60px;">
+      <div class="phone-frame animate-scale animate-up">
+        <img src="../screenshots/03-owner-residents.png" alt="Residents Screen" />
+      </div>
+      <div class="flex-col text-left" style="align-items:flex-start; flex:1;">
+        <div class="subtitle animate-up">Owner Experience</div>
+        <h2 class="animate-up animate-up-d1">Property &amp; Resident Management</h2>
+        <div class="divider animate-up animate-up-d2"></div>
+        <div class="animate-up animate-up-d3" style="display:flex; flex-direction:column; gap:12px; width:100%;">
+          <div class="feature-card" style="padding:16px;">
+            <div class="title" style="font-size:16px;">🏢 Property Detail</div>
+            <div class="desc">Stats strip: total / occupied / vacant units, monthly revenue</div>
+          </div>
+          <div class="feature-card" style="padding:16px;">
+            <div class="title" style="font-size:16px;">👥 Resident List</div>
+            <div class="desc">Search, filter, and manage tenants with unit + rent details</div>
+          </div>
+          <div class="feature-card" style="padding:16px;">
+            <div class="title" style="font-size:16px;">➕ Add Resident</div>
+            <div class="desc">FAB button for quick tenant onboarding</div>
+          </div>
+          <div class="feature-card" style="padding:16px;">
+            <div class="title" style="font-size:16px;">📋 Tenant Detail</div>
+            <div class="desc">Full profile, lease info, payment history at a tap</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- === SLIDE 5: FINANCE + ISSUES === -->
+  <div class="slide" data-slide="5">
+    <div class="flex-row" style="align-items:flex-start; gap:60px;">
+      <div class="flex-col text-left" style="align-items:flex-start; flex:1;">
+        <div class="subtitle animate-up">Owner Experience</div>
+        <h2 class="animate-up animate-up-d1">Finance &amp; Maintenance</h2>
+        <div class="divider animate-up animate-up-d2"></div>
+        <div class="animate-up animate-up-d3" style="display:flex; flex-direction:column; gap:12px; width:100%;">
+          <div class="feature-card" style="padding:16px;">
+            <div class="title" style="font-size:16px;">💰 Rent Ledger</div>
+            <div class="desc">Collection status: paid / pending / overdue — color-coded</div>
+          </div>
+          <div class="feature-card" style="padding:16px;">
+            <div class="title" style="font-size:16px;">📋 Transaction Log</div>
+            <div class="desc">All income &amp; expenses with + / - indicators</div>
+          </div>
+          <div class="feature-card" style="padding:16px;">
+            <div class="title" style="font-size:16px;">🔧 Maintenance Issues</div>
+            <div class="desc">Open / In Progress / Resolved with priority levels</div>
+          </div>
+          <div class="feature-card" style="padding:16px;">
+            <div class="title" style="font-size:16px;">💬 Issue Chat</div>
+            <div class="desc">Real-time owner ↔ tenant messaging per issue</div>
+          </div>
+        </div>
+      </div>
+      <div class="flex-col" style="gap:20px;">
+        <div class="phone-frame animate-scale animate-up-d1">
+          <img src="../screenshots/04-owner-finance.png" alt="Finance Screen" />
+        </div>
+        <div class="phone-frame animate-scale animate-up-d3" style="height:280px;">
+          <img src="../screenshots/05-owner-issues.png" alt="Issues Screen" />
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- === SLIDE 6: TENANT EXPERIENCE === -->
+  <div class="slide" data-slide="6">
+    <div class="flex-row" style="align-items:flex-start; gap:60px;">
+      <div class="phone-frame animate-scale animate-up">
+        <img src="../screenshots/07-tenant-dashboard.png" alt="Tenant Dashboard" />
+      </div>
+      <div class="flex-col text-left" style="align-items:flex-start; flex:1;">
+        <div class="subtitle animate-up">Tenant Experience</div>
+        <h2 class="animate-up animate-up-d1">Everything a tenant needs</h2>
+        <div class="divider animate-up animate-up-d2"></div>
+        <div class="animate-up animate-up-d3" style="display:flex; flex-direction:column; gap:12px; width:100%;">
+          <div class="feature-card" style="padding:16px;">
+            <div class="title" style="font-size:16px;">🏠 Tenant Dashboard</div>
+            <div class="desc">Property info, lease overview, rent status at a glance</div>
+          </div>
+          <div class="feature-card" style="padding:16px;">
+            <div class="title" style="font-size:16px;">💳 Rent Payment</div>
+            <div class="desc">Pay rent in-app with UPI / GPay / PhonePe / PayTM</div>
+          </div>
+          <div class="feature-card" style="padding:16px;">
+            <div class="title" style="font-size:16px;">🔧 Maintenance Requests</div>
+            <div class="desc">Raise issues, track progress, chat with owner</div>
+          </div>
+          <div class="feature-card" style="padding:16px;">
+            <div class="title" style="font-size:16px;">📄 Lease Agreement</div>
+            <div class="desc">View, download, and share lease PDF</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- === SLIDE 7: TENANT SCREENS === -->
+  <div class="slide" data-slide="7">
+    <div class="flex-row" style="gap:24px; flex-wrap:wrap; justify-content:center;">
+      <div class="flex-col animate-up animate-up-d1">
+        <div class="phone-frame" style="width:200px; height:400px;">
+          <img src="../screenshots/08-tenant-payments.png" alt="Payments" />
+        </div>
+        <p style="font-family:'Manrope',sans-serif;font-weight:600;font-size:14px;color:var(--primary);">Payments</p>
+      </div>
+      <div class="flex-col animate-up animate-up-d2">
+        <div class="phone-frame" style="width:200px; height:400px;">
+          <img src="../screenshots/09-tenant-maintenance.png" alt="Maintenance" />
+        </div>
+        <p style="font-family:'Manrope',sans-serif;font-weight:600;font-size:14px;color:var(--primary);">Maintenance</p>
+      </div>
+      <div class="flex-col animate-up animate-up-d3">
+        <div class="phone-frame" style="width:200px; height:400px;">
+          <img src="../screenshots/10-tenant-profile.png" alt="Tenant Profile" />
+        </div>
+        <p style="font-family:'Manrope',sans-serif;font-weight:600;font-size:14px;color:var(--primary);">Profile &amp; Lease</p>
+      </div>
+      <div class="flex-col animate-up animate-up-d4">
+        <div class="phone-frame" style="width:200px; height:400px;">
+          <img src="../screenshots/06-owner-profile.png" alt="Owner Profile" />
+        </div>
+        <p style="font-family:'Manrope',sans-serif;font-weight:600;font-size:14px;color:var(--primary);">Role Switching</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- === SLIDE 8: TECH STACK === -->
+  <div class="slide" data-slide="8">
+    <div class="flex-col">
+      <div class="subtitle animate-up">Technical Foundation</div>
+      <h1 class="animate-up animate-up-d1">Built to scale</h1>
+      <div class="divider animate-up animate-up-d2"></div>
+      <div class="feature-grid animate-up animate-up-d3" style="margin-top:12px;">
+        <div class="feature-card">
+          <div class="icon">⚛️</div>
+          <div class="title">React Native + Expo</div>
+          <div class="desc">Cross-platform iOS &amp; Android from one codebase. Hot reload, EAS builds.</div>
+        </div>
+        <div class="feature-card">
+          <div class="icon">🗄️</div>
+          <div class="title">Supabase Backend</div>
+          <div class="desc">PostgreSQL, Auth, Row Level Security. Tenants see only their data.</div>
+        </div>
+        <div class="feature-card">
+          <div class="icon">🔒</div>
+          <div class="title">RLS Security</div>
+          <div class="desc">Every table has per-row policies. Owner data and tenant data are fully isolated.</div>
+        </div>
+        <div class="feature-card">
+          <div class="icon">🎨</div>
+          <div class="title">Design System</div>
+          <div class="desc">"The Precision Atelier" — Manrope + Inter, tonal surface stacking, no borders.</div>
+        </div>
+        <div class="feature-card">
+          <div class="icon">📱</div>
+          <div class="title">One Binary, Two UIs</div>
+          <div class="desc">Auth-based routing renders OwnerNavigator or TenantNavigator dynamically.</div>
+        </div>
+        <div class="feature-card">
+          <div class="icon">📈</div>
+          <div class="title">Real Data</div>
+          <div class="desc">Every number on screen comes from live Supabase queries. No hardcoded mock data.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- === SLIDE 9: LIVE DEMO PREVIEW === -->
+  <div class="slide" data-slide="9">
+    <div class="flex-col">
+      <div class="subtitle animate-up">Ready for Demo</div>
+      <h1 class="animate-up animate-up-d1">"What do you think?"</h1>
+      <div class="divider animate-up animate-up-d2"></div>
+        <div class="flex-row animate-up animate-up-d3" style="gap:16px; flex-wrap:wrap; justify-content:center;">
+          <div class="phone-frame" style="width:180px; height:350px;">
+            <img src="../screenshots/01-login.png" alt="Login" />
+          </div>
+          <div class="phone-frame" style="width:180px; height:350px;">
+            <img src="../screenshots/02-owner-portfolio.png" alt="Portfolio" />
+          </div>
+          <div class="phone-frame" style="width:180px; height:350px;">
+            <img src="../screenshots/07-tenant-dashboard.png" alt="Tenant Dashboard" />
+          </div>
+        </div>
+      <div style="height:16px"></div>
+      <p class="body-text animate-up animate-up-d4" style="max-width:500px;">
+        <strong>10 screens</strong> · 2 roles · 1 app<br>
+        Built with Indian property management in mind — crore/lakh formatting, UPI support
+      </p>
+    </div>
+  </div>
+
+  <!-- === SLIDE 10: CLOSING === -->
+  <div class="slide slide-title" data-slide="10" style="background:linear-gradient(135deg, var(--primary) 0%, #0a2e55 100%);">
+    <div class="flex-col">
+      <h1 class="animate-up" style="color:var(--onPrimary);">Thank you</h1>
+      <div class="divider animate-up animate-up-d1" style="background:var(--tertiaryFixedDim);"></div>
+      <p class="body-text animate-up animate-up-d2" style="color:var(--primaryFixedDim); max-width:500px;">
+        Tenura is production-ready and built for scale.<br>
+        Questions? Let's walk through the code or schema.
+      </p>
+      <div style="height:12px"></div>
+      <div class="flex-row animate-up animate-up-d3" style="gap:20px;">
+        <span class="tech-badge" style="background:rgba(255,255,255,0.15);color:var(--primaryFixedDim);">Rudvik Dinesh</span>
+        <span class="tech-badge" style="background:rgba(255,255,255,0.15);color:var(--primaryFixedDim);">ECE · Batch 2029</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- === NAVIGATION === -->
+<div class="nav-dots" id="navDots"></div>
+<div class="nav-arrow prev" id="prevArrow">‹</div>
+<div class="nav-arrow next" id="nextArrow">›</div>
+<div class="slide-counter" id="slideCounter"></div>
+
+<script>
+  const slides = document.querySelectorAll('.slide');
+  const totalSlides = slides.length;
+  let current = 0;
+  let animating = false;
+
+  // Build nav dots
+  const dotsContainer = document.getElementById('navDots');
+  for (let i = 0; i < totalSlides; i++) {
+    const dot = document.createElement('button');
+    dot.className = 'nav-dot' + (i === 0 ? ' active' : '');
+    dot.dataset.index = i;
+    dot.addEventListener('click', () => goTo(i));
+    dotsContainer.appendChild(dot);
+  }
+
+  function goTo(index) {
+    if (animating || index === current || index < 0 || index >= totalSlides) return;
+    animating = true;
+
+    slides[current].classList.remove('active');
+    slides[current].classList.add('exit');
+
+    // Force reflow + de-opacity before showing new slide
+    setTimeout(() => {
+      slides[current].classList.remove('exit');
+      slides[current].style.display = 'none';
+
+      current = index;
+      slides[current].style.display = '';
+      // Trigger animation by adding active class
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          slides[current].classList.add('active');
+          updateDots();
+          animating = false;
+        });
+      });
+    }, 300);
+  }
+
+  function updateDots() {
+    document.querySelectorAll('.nav-dot').forEach((dot, i) => {
+      dot.classList.toggle('active', i === current);
+    });
+  }
+
+  document.getElementById('prevArrow').addEventListener('click', () => goTo(current - 1));
+  document.getElementById('nextArrow').addEventListener('click', () => goTo(current + 1));
+
+  // Slide counter
+  const counterEl = document.getElementById('slideCounter');
+  function updateCounter() {
+    counterEl.textContent = `${current + 1} / ${totalSlides}`;
+  }
+  updateCounter();
+
+  // Patch goTo to also update counter + hook updateDots
+  const origGoTo = goTo;
+  goTo = function(index) {
+    origGoTo(index);
+    setTimeout(() => updateCounter(), 350);
+  };
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); goTo(current + 1); }
+    if (e.key === 'ArrowLeft') { e.preventDefault(); goTo(current - 1); }
+    if (e.key === 'Home') { e.preventDefault(); goTo(0); }
+    if (e.key === 'End') { e.preventDefault(); goTo(totalSlides - 1); }
+  });
+</script>
+</body>
+</html>

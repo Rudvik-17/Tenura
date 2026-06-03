@@ -1,4 +1,4 @@
--- Seed Data for EstateLogic
+-- Seed Data for Tenura
 -- IMPORTANT: Replace the UUIDs below with your actual owner and tenant user IDs
 -- from Supabase Auth (Authentication > Users in your dashboard).
 -- Run 001_create_tables.sql first.
@@ -66,7 +66,7 @@ BEGIN
 
   -- Maintenance Requests
   INSERT INTO public.maintenance_requests (tenant_id, property_id, subject, details, status, priority, case_number, resolution_progress, scheduled_visit) VALUES
-    (tenant1_id, prop1_id, 'Leaky Faucet - Kitchen', 'The kitchen faucet has been dripping continuously for the past 2 days causing water damage near the sink cabinet.', 'in_progress', 'medium', 'EL-4902', 65, NOW() + INTERVAL '1 day'),
+    (tenant1_id, prop1_id, 'Leaky Faucet - Kitchen', 'The kitchen faucet has been dripping continuously for the past 2 days causing water damage near the sink cabinet.', 'in_progress', 'medium', 'TN-4902', 65, NOW() + INTERVAL '1 day'),
     (tenant2_id, prop1_id, 'AC not working', 'The split AC in the master bedroom stopped cooling. The unit turns on but blows warm air.', 'in_progress', 'high', 'ISS-8831', 40, NOW() + INTERVAL '3 hours'),
     (tenant3_id, prop2_id, 'Door Lock Issue', 'The digital PIN lock on the main door intermittently fails to recognize the registered PIN codes.', 'open', 'medium', 'ISS-8911', 0, NULL),
     (tenant1_id, prop1_id, 'Hallway Light Flickering', 'The corridor light outside Unit 402-B has been flickering for a week.', 'resolved', 'low', 'ISS-8720', 100, NULL);

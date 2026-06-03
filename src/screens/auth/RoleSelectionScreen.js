@@ -100,7 +100,7 @@ export default function RoleSelectionScreen() {
     <View style={[styles.container, { paddingBottom: insets.bottom }]}>
       {/* Dark header */}
       <View style={[styles.header, { paddingTop: insets.top + 24 }]}>
-        <Text style={styles.logoText}>ESTATE LOGIC</Text>
+        <Text style={styles.logoText}>TENURA</Text>
         <Text style={styles.headerTitle}>Choose your journey.</Text>
         <Text style={styles.headerSubtitle}>
           Select your primary perspective to personalise your dashboard.

@@ -29,7 +29,7 @@ export async function requestPermissions() {
   // Android requires a notification channel
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('default', {
-      name: 'EstateLogic',
+      name: 'Tenura',
       importance: Notifications.AndroidImportance.HIGH,
       sound: 'default',
     });

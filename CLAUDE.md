@@ -1,8 +1,8 @@
-# EstateLogic — Claude Instructions
+# Tenura — Claude Instructions
 
 ## Project overview
 
-EstateLogic is a React Native + Expo app for property management. It serves two roles:
+Tenura is a React Native + Expo app for property management. It serves two roles:
 - **Owner** — manages properties, tenants, finances, and maintenance issues
 - **Tenant** — pays rent, raises maintenance requests, views their lease
 

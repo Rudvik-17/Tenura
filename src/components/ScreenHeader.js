@@ -17,7 +17,7 @@ export default function ScreenHeader({ title, showBack, onBack, showBell, onBell
             <MaterialIcons name="arrow-back" size={22} color={colors.onPrimary} />
           </TouchableOpacity>
         ) : (
-          <Text style={styles.logo}>ESTATE LOGIC</Text>
+          <Text style={styles.logo}>TENURA</Text>
         )}
       </View>
       {title ? <Text style={styles.title}>{title}</Text> : <View style={styles.spacer} />}

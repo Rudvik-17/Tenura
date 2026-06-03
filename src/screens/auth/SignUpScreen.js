@@ -110,7 +110,7 @@ export default function SignUpScreen({ navigation }) {
       >
         {/* Hero */}
         <View style={[styles.hero, { paddingTop: insets.top + 32 }]}>
-          <Text style={styles.logoText}>ESTATE LOGIC</Text>
+          <Text style={styles.logoText}>TENURA</Text>
           <Text style={styles.tagline}>Architectural Trust. Defined.</Text>
           <View style={styles.heroDivider} />
         </View>
@@ -118,7 +118,7 @@ export default function SignUpScreen({ navigation }) {
         {/* Form card */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Create Account</Text>
-          <Text style={styles.cardSubtitle}>Join EstateLogic to manage your properties</Text>
+          <Text style={styles.cardSubtitle}>Join Tenura to manage your properties</Text>
 
           {/* Full Name */}
           <Text style={styles.fieldLabel}>FULL NAME</Text>

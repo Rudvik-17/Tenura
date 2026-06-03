@@ -64,7 +64,7 @@ export default function LoginScreen({ navigation }) {
       >
         {/* Hero — dark brand section */}
         <View style={[styles.hero, { paddingTop: insets.top + 32 }]}>
-          <Text style={styles.logoText}>ESTATE LOGIC</Text>
+          <Text style={styles.logoText}>TENURA</Text>
           <Text style={styles.tagline}>Architectural Trust. Defined.</Text>
 
           {/* Angled divider illusion */}

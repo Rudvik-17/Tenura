@@ -1,4 +1,4 @@
--- EstateLogic Schema
+-- Tenura Schema
 -- Run this in the Supabase SQL editor: https://supabase.com/dashboard/project/olswwdunaivwxefelasc/sql
 
 -- Users table extension (extends Supabase auth.users)

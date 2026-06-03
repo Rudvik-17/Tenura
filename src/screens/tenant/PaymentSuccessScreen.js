@@ -18,6 +18,12 @@ import { colors } from '../../theme/colors';
 import { fonts } from '../../theme/typography';
 import { buildReceiptHTML } from '../../lib/receiptHTML';
 
+const METHOD_LABELS = {
+  gpay: 'Google Pay',
+  phonepe: 'PhonePe',
+  paytm: 'Paytm',
+};
+
 export default function PaymentSuccessScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
@@ -92,7 +98,7 @@ export default function PaymentSuccessScreen({ navigation, route }) {
           onPress={() => navigation.goBack()}
         >
           <MaterialIcons name="arrow-back" size={18} color="rgba(255,255,255,0.7)" />
-          <Text style={styles.backText}>Estate Logic</Text>
+          <Text style={styles.backText}>Tenura</Text>
         </TouchableOpacity>
 
         {/* Success icon */}

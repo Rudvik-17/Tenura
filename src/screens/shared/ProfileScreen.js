@@ -123,7 +123,7 @@ export default function ProfileScreen() {
         </View>
 
         {/* Version */}
-        <Text style={styles.versionText}>Estate Logic v{APP_VERSION}</Text>
+        <Text style={styles.versionText}>Tenura v{APP_VERSION}</Text>
       </ScrollView>
     </View>
   );

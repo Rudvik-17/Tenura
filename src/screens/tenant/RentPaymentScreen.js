@@ -26,12 +26,12 @@ const UPI_METHODS = [
   { key: 'paytm', label: 'Paytm', sub: 'Fast checkout with Paytm Postpaid', icon: 'account-balance-wallet' },
 ];
 
-const OWNER_UPI_ID = 'estatelogic@upi';
+const OWNER_UPI_ID = 'tenura@upi';
 
 function buildUpiUrl(amount) {
   const params = new URLSearchParams({
     pa: OWNER_UPI_ID,
-    pn: 'EstateLogic',
+    pn: 'Tenura',
     am: String(amount),
     cu: 'INR',
     tn: 'Rent Payment',

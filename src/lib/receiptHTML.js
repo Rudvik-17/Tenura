@@ -142,7 +142,7 @@ export function buildReceiptHTML({ txnId, amount, method, paidAt, tenantName, pr
 <body>
   <div class="page">
     <div class="header">
-      <div class="brand">EstateLogic</div>
+      <div class="brand">Tenura</div>
       <div class="brand-sub">Property Management</div>
       <div class="header-right">
         <div class="receipt-label">Receipt No.</div>
@@ -195,8 +195,8 @@ export function buildReceiptHTML({ txnId, amount, method, paidAt, tenantName, pr
     </div>
     <div class="footer">
       <div class="footer-line">This is a computer-generated receipt and does not require a physical signature.</div>
-      <div class="footer-line">For queries, contact your property manager via the EstateLogic app.</div>
-      <div class="footer-brand">ESTATELOGIC &nbsp;·&nbsp; Secure Property Management</div>
+      <div class="footer-line">For queries, contact your property manager via the Tenura app.</div>
+      <div class="footer-brand">TENURA &nbsp;·&nbsp; Secure Property Management</div>
     </div>
   </div>
 </body>

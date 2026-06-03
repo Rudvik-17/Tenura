@@ -123,7 +123,7 @@ export function buildLeaseAgreementHTML({
 <div class="page">
   <div class="header">
     <div>
-      <div class="brand">EstateLogic</div>
+      <div class="brand">Tenura</div>
       <div class="brand-sub">Property Management</div>
     </div>
     <div class="doc-meta">
@@ -250,9 +250,9 @@ export function buildLeaseAgreementHTML({
   </div>
 
   <div class="footer">
-    <div class="footer-line">This is a computer-generated rental agreement document managed via EstateLogic.</div>
-    <div class="footer-line">For queries or amendments, contact your property manager through the EstateLogic app.</div>
-    <div class="footer-brand">ESTATELOGIC &nbsp;·&nbsp; Secure Property Management</div>
+    <div class="footer-line">This is a computer-generated rental agreement document managed via Tenura.</div>
+    <div class="footer-line">For queries or amendments, contact your property manager through the Tenura app.</div>
+    <div class="footer-brand">TENURA &nbsp;·&nbsp; Secure Property Management</div>
   </div>
 </div>
 </body>

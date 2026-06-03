@@ -28,7 +28,7 @@ const CLAUSES = [
   },
   {
     title: 'Maintenance Responsibilities',
-    body: 'Tenant is responsible for minor day-to-day maintenance. Structural repairs, plumbing, and electrical issues must be reported via the Estate Logic maintenance portal within 24 hours of discovery.',
+    body: 'Tenant is responsible for minor day-to-day maintenance. Structural repairs, plumbing, and electrical issues must be reported via the Tenura maintenance portal within 24 hours of discovery.',
   },
   {
     title: 'Lease Termination',

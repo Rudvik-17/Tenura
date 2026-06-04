@@ -118,6 +118,13 @@ CREATE TABLE IF NOT EXISTS public.maintenance_requests (
   case_number text NOT NULL,
   resolution_progress int NOT NULL DEFAULT 0 CHECK (resolution_progress BETWEEN 0 AND 100),
   scheduled_visit timestamptz,
+  location_type text,
+  location_details text,
+  category text,
+  contact_preference text,
+  has_animal boolean DEFAULT false,
+  entry_note text,
+  allow_entry boolean DEFAULT false,
   created_at timestamptz NOT NULL DEFAULT now()
 );
 

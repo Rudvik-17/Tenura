@@ -13,11 +13,17 @@ import PaymentSuccessScreen from '../screens/tenant/PaymentSuccessScreen';
 import MaintenanceRequestScreen from '../screens/tenant/MaintenanceRequestScreen';
 import IssueMessagesScreen from '../screens/shared/IssueMessagesScreen';
 import ProfileScreen from '../screens/shared/ProfileScreen';
+import CommunityScreen from '../screens/tenant/CommunityScreen';
+import OfficeInfoScreen from '../screens/tenant/OfficeInfoScreen';
+import AnnouncementsScreen from '../screens/tenant/AnnouncementsScreen';
+import MessagesAlertsScreen from '../screens/tenant/MessagesAlertsScreen';
+import ShipPlayScreen from '../screens/tenant/ShipPlayScreen';
 
 const Tab = createBottomTabNavigator();
 const DashboardStack = createStackNavigator();
 const PaymentsStack = createStackNavigator();
 const MaintenanceStack = createStackNavigator();
+const CommunityStack = createStackNavigator();
 
 function DashboardStackNav() {
   return (
@@ -47,6 +53,18 @@ function MaintenanceStackNav() {
   );
 }
 
+function CommunityStackNav() {
+  return (
+    <CommunityStack.Navigator screenOptions={{ headerShown: false }}>
+      <CommunityStack.Screen name="CommunityMain" component={CommunityScreen} />
+      <CommunityStack.Screen name="OfficeInfo" component={OfficeInfoScreen} />
+      <CommunityStack.Screen name="Announcements" component={AnnouncementsScreen} />
+      <CommunityStack.Screen name="MessagesAlerts" component={MessagesAlertsScreen} />
+      <CommunityStack.Screen name="ShipPlay" component={ShipPlayScreen} />
+    </CommunityStack.Navigator>
+  );
+}
+
 const TAB_BAR_STYLE = {
   backgroundColor: colors.primary,
   borderTopWidth: 0,
@@ -73,6 +91,7 @@ export default function TenantNavigator() {
             Dashboard: 'dashboard',
             Payments: 'payments',
             Maintenance: 'build',
+            Community: 'business',
             Profile: 'person',
           };
           return <MaterialIcons name={icons[route.name]} size={size} color={color} />;
@@ -82,6 +101,7 @@ export default function TenantNavigator() {
       <Tab.Screen name="Dashboard" component={DashboardStackNav} />
       <Tab.Screen name="Payments" component={PaymentsStackNav} />
       <Tab.Screen name="Maintenance" component={MaintenanceStackNav} />
+      <Tab.Screen name="Community" component={CommunityStackNav} />
       <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>
   );

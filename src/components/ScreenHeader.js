@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../theme/colors';
 import { fonts } from '../theme/typography';
 
-export default function ScreenHeader({ title, showBack, onBack, showBell, onBell }) {
+export default function ScreenHeader({ title, showBack, onBack, showBell, onBell, hideLogo }) {
   const insets = useSafeAreaInsets();
 
   return (
@@ -16,6 +16,8 @@ export default function ScreenHeader({ title, showBack, onBack, showBell, onBell
           <TouchableOpacity onPress={onBack} style={styles.backBtn} activeOpacity={0.7}>
             <MaterialIcons name="arrow-back" size={22} color={colors.onPrimary} />
           </TouchableOpacity>
+        ) : hideLogo ? (
+          <View style={{ width: 40 }} />
         ) : (
           <Text style={styles.logo}>TENURA</Text>
         )}
@@ -40,6 +42,7 @@ ScreenHeader.propTypes = {
   onBack: PropTypes.func,
   showBell: PropTypes.bool,
   onBell: PropTypes.func,
+  hideLogo: PropTypes.bool,
 };
 
 ScreenHeader.defaultProps = {
@@ -48,6 +51,7 @@ ScreenHeader.defaultProps = {
   onBack: null,
   showBell: false,
   onBell: null,
+  hideLogo: false,
 };
 
 const styles = StyleSheet.create({

@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   Alert,
+  Linking,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -31,6 +32,7 @@ export default function TenantDashboard({ navigation }) {
   const [tenantProfile, setTenantProfile] = useState(null);
   const [lease, setLease] = useState(null);
   const [ownerName, setOwnerName] = useState(null);
+  const [ownerInfo, setOwnerInfo] = useState(null);
   const [pendingPayment, setPendingPayment] = useState(null);
   const [activeIssues, setActiveIssues] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -72,10 +74,14 @@ export default function TenantDashboard({ navigation }) {
     if (tenantData.owner_id) {
       supabase
         .from('users')
-        .select('full_name')
+        .select('full_name, email, phone')
         .eq('id', tenantData.owner_id)
         .limit(1)
-        .then(({ data: ownerRows }) => setOwnerName(ownerRows?.[0]?.full_name ?? null));
+        .then(({ data: ownerRows }) => {
+          const owner = ownerRows?.[0] ?? null;
+          setOwnerName(owner?.full_name ?? null);
+          setOwnerInfo(owner);
+        });
     }
 
     const [leaseRes, paymentRes, issuesRes] = await Promise.all([
@@ -152,6 +158,39 @@ export default function TenantDashboard({ navigation }) {
   const formatDate = (d) =>
     new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
 
+  const handleBalanceInfoPress = () => {
+    Alert.alert(
+      'Rent Balance',
+      pendingPayment
+        ? `Your current rent payment of ₹${Number(pendingPayment.amount).toLocaleString('en-IN')} is due on ${formatDate(pendingPayment.due_date)}.`
+        : 'You have no outstanding rent payments. All payments are up to date!'
+    );
+  };
+
+  const handleContactPress = () => {
+    if (!ownerInfo) {
+      Alert.alert('Contact Landlord', 'Landlord contact information is not available.');
+      return;
+    }
+    Alert.alert(
+      `Contact ${ownerInfo.full_name || 'Landlord'}`,
+      `Phone: ${ownerInfo.phone || 'Not provided'}\nEmail: ${ownerInfo.email || 'Not provided'}`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        ownerInfo.phone ? { text: 'Call', onPress: () => Linking.openURL(`tel:${ownerInfo.phone}`) } : null,
+        ownerInfo.email ? { text: 'Email', onPress: () => Linking.openURL(`mailto:${ownerInfo.email}`) } : null,
+      ].filter(Boolean)
+    );
+  };
+
+  const handleViewDocumentsPress = () => {
+    if (lease) {
+      navigation.navigate('RentalAgreement', { leaseId: lease.id });
+    } else {
+      Alert.alert('Documents', 'No active lease or documents found.');
+    }
+  };
+
   if (loading) {
     return (
       <View style={styles.centered}>
@@ -187,57 +226,99 @@ export default function TenantDashboard({ navigation }) {
 
   return (
     <View style={styles.container}>
-      <ScreenHeader showBell />
+      <ScreenHeader
+        title={`Hello ${tenantProfile?.full_name || ''}`}
+        hideLogo
+        showBell
+      />
       <ScrollView
         contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
       >
-        {/* Greeting */}
-        <View style={styles.greetingSection}>
-          <Text style={styles.greetingLabel}>WELCOME HOME</Text>
-          <Text style={styles.greetingName}>{tenantProfile.full_name}</Text>
-          <View style={styles.locationRow}>
-            <MaterialIcons name="location-on" size={13} color="rgba(255,255,255,0.6)" />
-            <Text style={styles.locationText}>
-              Unit {tenantProfile.unit_number} · {tenantProfile.properties?.name}
-            </Text>
-          </View>
-        </View>
-
-        {/* Monthly Rent Card */}
-        {pendingPayment ? (
-          <View style={styles.rentCard}>
-            <View style={styles.rentCardHeader}>
-              <Text style={styles.rentCardLabel}>Monthly Rent</Text>
-              <StatusChip
-                label={pendingPayment?.status === 'overdue' ? 'Overdue' : 'Due Soon'}
-                variant={pendingPayment?.status === 'overdue' ? 'urgent' : 'pending'}
-              />
-            </View>
-            <Text style={styles.rentAmount}>
-              ₹{Number(pendingPayment.amount).toLocaleString('en-IN')}
-            </Text>
-            {pendingPayment?.due_date ? (
-              <Text style={styles.rentDue}>Due {formatDate(pendingPayment.due_date)}</Text>
-            ) : null}
-            <View style={styles.rentActions}>
-              <PrimaryButton
-                label="Pay Now"
-                onPress={() => navigation.getParent().navigate('Payments', { screen: 'RentPayment' })}
-                icon="arrow-forward"
-              />
-              <TouchableOpacity style={styles.viewStatementBtn}>
-                <Text style={styles.viewStatementText}>View Statement</Text>
+        {/* Unified Balance Hero Section */}
+        <View style={styles.balanceHero}>
+          <View style={styles.balanceInfo}>
+            <View style={styles.balanceLabelRow}>
+              <Text style={styles.balanceLabel}>
+                {pendingPayment
+                  ? pendingPayment.status === 'overdue'
+                    ? 'BALANCE OVERDUE'
+                    : 'BALANCE DUE'
+                  : 'NO BALANCE DUE'}
+              </Text>
+              <TouchableOpacity onPress={handleBalanceInfoPress} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <MaterialIcons name="info-outline" size={14} color="rgba(255,255,255,0.6)" />
               </TouchableOpacity>
             </View>
+            <Text style={styles.balanceAmount}>
+              ₹{pendingPayment ? Number(pendingPayment.amount).toLocaleString('en-IN') : '0.00'}
+            </Text>
+            {pendingPayment?.due_date ? (
+              <Text style={styles.balanceDueText}>
+                Due {formatDate(pendingPayment.due_date)}
+              </Text>
+            ) : (
+              <Text style={styles.balanceDueText}>All systems optimal</Text>
+            )}
           </View>
-        ) : (
-          <View style={[styles.rentCard, styles.noPaymentCard]}>
-            <MaterialIcons name="check-circle" size={24} color={colors.tertiaryFixedDim} />
-            <Text style={styles.noPaymentText}>No payment due</Text>
+          
+          <TouchableOpacity
+            style={styles.makePaymentBtn}
+            onPress={() => navigation.getParent().navigate('Payments', { screen: 'RentPayment' })}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.makePaymentBtnText}>Make Payment</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Quick Links Section */}
+        <View style={styles.quickLinksSection}>
+          <Text style={styles.quickLinksTitle}>Quick Links</Text>
+          <View style={styles.quickLinksRow}>
+            {/* Link 1: Request Maintenance */}
+            <View style={styles.quickLinkItem}>
+              <TouchableOpacity
+                style={styles.quickLinkCircle}
+                onPress={() => navigation.navigate('Maintenance')}
+                activeOpacity={0.7}
+              >
+                <MaterialIcons name="build" size={26} color={colors.primary} />
+              </TouchableOpacity>
+              <Text style={styles.quickLinkLabel} numberOfLines={2}>
+                Request{'\n'}Maintenance
+              </Text>
+            </View>
+
+            {/* Link 2: Contact Us */}
+            <View style={styles.quickLinkItem}>
+              <TouchableOpacity
+                style={styles.quickLinkCircle}
+                onPress={handleContactPress}
+                activeOpacity={0.7}
+              >
+                <MaterialIcons name="smartphone" size={26} color={colors.primary} />
+              </TouchableOpacity>
+              <Text style={styles.quickLinkLabel} numberOfLines={2}>
+                Contact Us
+              </Text>
+            </View>
+
+            {/* Link 3: View Documents */}
+            <View style={styles.quickLinkItem}>
+              <TouchableOpacity
+                style={styles.quickLinkCircle}
+                onPress={handleViewDocumentsPress}
+                activeOpacity={0.7}
+              >
+                <MaterialIcons name="description" size={26} color={colors.primary} />
+              </TouchableOpacity>
+              <Text style={styles.quickLinkLabel} numberOfLines={2}>
+                View{'\n'}Documents
+              </Text>
+            </View>
           </View>
-        )}
+        </View>
 
         {/* Home Status */}
         <View style={styles.section}>
@@ -259,33 +340,6 @@ export default function TenantDashboard({ navigation }) {
               <StatusChip label={`${activeIssues.length} Active`} variant="pending" />
             ) : null}
           </View>
-        </View>
-
-        {/* Quick Access */}
-        <View style={styles.section}>
-          <SectionHeader title="Quick Access" />
-          <TouchableOpacity
-            style={styles.quickAccessBtn}
-            onPress={() => navigation.navigate('Maintenance')}
-          >
-            <View style={styles.quickIconBg}>
-              <MaterialIcons name="build" size={20} color={colors.primary} />
-            </View>
-            <Text style={styles.quickAccessLabel}>Maintenance Request</Text>
-            <MaterialIcons name="chevron-right" size={20} color={colors.outline} />
-          </TouchableOpacity>
-          {lease ? (
-            <TouchableOpacity
-              style={styles.quickAccessBtn}
-              onPress={() => navigation.navigate('RentalAgreement', { leaseId: lease.id })}
-            >
-              <View style={styles.quickIconBg}>
-                <MaterialIcons name="description" size={20} color={colors.primary} />
-              </View>
-              <Text style={styles.quickAccessLabel}>Rental Agreement</Text>
-              <MaterialIcons name="chevron-right" size={20} color={colors.outline} />
-            </TouchableOpacity>
-          ) : null}
         </View>
 
         {/* Documents */}
@@ -322,79 +376,96 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface, padding: 24,
   },
 
-  greetingSection: {
+  balanceHero: {
     backgroundColor: colors.primaryContainer,
-    paddingHorizontal: 24,
-    paddingTop: 20,
-    paddingBottom: 28,
-  },
-  greetingLabel: {
-    fontFamily: fonts.interSemiBold,
-    fontSize: 10,
-    letterSpacing: 2,
-    color: 'rgba(255,255,255,0.5)',
-    textTransform: 'uppercase',
-    marginBottom: 6,
-  },
-  greetingName: {
-    fontFamily: fonts.manropeBold,
-    fontSize: 26,
-    color: colors.onPrimary,
-    marginBottom: 4,
-  },
-  locationRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  locationText: {
-    fontFamily: fonts.interRegular, fontSize: 13,
-    color: 'rgba(255,255,255,0.65)',
-  },
-
-  rentCard: {
-    backgroundColor: colors.surfaceContainerLowest,
-    marginHorizontal: 16,
-    marginTop: 16,
-    borderRadius: 16,
-    padding: 20,
-  },
-  noPaymentCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  noPaymentText: {
-    fontFamily: fonts.interMedium,
-    fontSize: 14,
-    color: colors.onSurfaceVariant,
-  },
-  rentCardHeader: {
+    paddingHorizontal: 20,
+    paddingVertical: 24,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
   },
-  rentCardLabel: {
+  balanceInfo: {
+    flex: 1,
+  },
+  balanceLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4,
+  },
+  balanceLabel: {
     fontFamily: fonts.interSemiBold,
     fontSize: 11,
     letterSpacing: 1,
-    color: colors.onSurfaceVariant,
+    color: 'rgba(255,255,255,0.6)',
     textTransform: 'uppercase',
   },
-  rentAmount: {
+  balanceAmount: {
     fontFamily: fonts.manropeBold,
     fontSize: 34,
-    color: colors.onSurface,
-    marginBottom: 4,
+    color: colors.onPrimary,
+    marginBottom: 2,
   },
-  rentDue: {
+  balanceDueText: {
     fontFamily: fonts.interRegular,
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.5)',
+  },
+  makePaymentBtn: {
+    backgroundColor: colors.surfaceContainerLowest,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 12,
+  },
+  makePaymentBtnText: {
+    fontFamily: fonts.interSemiBold,
     fontSize: 13,
-    color: colors.onSurfaceVariant,
+    color: colors.primary,
+  },
+
+  quickLinksSection: {
+    paddingHorizontal: 20,
+    paddingTop: 24,
+    paddingBottom: 8,
+  },
+  quickLinksTitle: {
+    fontFamily: fonts.manropeSemiBold,
+    fontSize: 16,
+    color: colors.onSurface,
     marginBottom: 16,
   },
-  rentActions: { gap: 12 },
-  viewStatementBtn: { alignItems: 'center', paddingVertical: 8 },
-  viewStatementText: {
-    fontFamily: fonts.interMedium, fontSize: 14,
-    color: colors.secondary,
+  quickLinksRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'flex-start',
+  },
+  quickLinkItem: {
+    alignItems: 'center',
+    width: 100,
+  },
+  quickLinkCircle: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: colors.primaryFixed,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  quickLinkLabel: {
+    fontFamily: fonts.interMedium,
+    fontSize: 12,
+    color: colors.onSurface,
+    textAlign: 'center',
+    lineHeight: 16,
   },
 
   section: { padding: 20 },

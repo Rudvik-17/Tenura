@@ -15,7 +15,6 @@ import {
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { supabase } from '../../lib/supabase';
@@ -57,7 +56,7 @@ export default function PaymentHistoryScreen({ navigation }) {
   const [showAutoPayModal, setShowAutoPayModal] = useState(false);
   const [showLedger, setShowLedger] = useState(false);
 
-  // Wallet stored payment states
+  // Wallet stored payment states (Supabase-backed)
   const [storedMethods, setStoredMethods] = useState([]);
   const [isAddingMethod, setIsAddingMethod] = useState(false);
   const [addMethodType, setAddMethodType] = useState('upi'); // 'upi' or 'card'
@@ -66,51 +65,60 @@ export default function PaymentHistoryScreen({ navigation }) {
   const [newCardName, setNewCardName] = useState('');
   const [newCardExpiry, setNewCardExpiry] = useState('');
 
-  // Auto-Pay configuration states
+  // Auto-Pay configuration states (Supabase-backed)
   const [autoPayEnabled, setAutoPayEnabled] = useState(false);
   const [autoPayDay, setAutoPayDay] = useState(5);
   const [autoPayMethod, setAutoPayMethod] = useState('');
 
-  // Load local wallet and auto-pay settings
-  const loadSavedSettings = useCallback(async () => {
+  // Fetch Wallet and Auto-Pay details from Supabase
+  const fetchWalletAndAutoPay = useCallback(async () => {
     if (!user) return;
     try {
-      const walletKey = `@tenura_wallet_${user.id}`;
-      const autopayKey = `@tenura_autopay_${user.id}`;
-      
-      const savedWallet = await AsyncStorage.getItem(walletKey);
-      if (savedWallet) {
-        setStoredMethods(JSON.parse(savedWallet));
-      } else {
-        const defaults = [
-          { id: 'm1', type: 'upi', label: 'Google Pay UPI', value: 'rudvik.dinesh@okaxis', active: true },
-          { id: 'm2', type: 'card', label: 'HDFC Debit Card', value: '**** **** **** 4092', active: false },
-        ];
-        await AsyncStorage.setItem(walletKey, JSON.stringify(defaults));
-        setStoredMethods(defaults);
+      // 1. Fetch stored payment methods
+      const { data: methodsData, error: methodsErr } = await supabase
+        .from('stored_payment_methods')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: true });
+
+      if (methodsErr) {
+        console.log('Error fetching payment methods:', methodsErr.message);
+      } else if (methodsData) {
+        setStoredMethods(methodsData);
       }
 
-      const savedAutoPay = await AsyncStorage.getItem(autopayKey);
-      if (savedAutoPay) {
-        const parsed = JSON.parse(savedAutoPay);
-        setAutoPayEnabled(parsed.enabled ?? false);
-        setAutoPayDay(parsed.day ?? 5);
-        setAutoPayMethod(parsed.method ?? 'm1');
+      // 2. Fetch auto-pay settings
+      const { data: apData, error: apErr } = await supabase
+        .from('autopay_settings')
+        .select('*')
+        .eq('user_id', user.id)
+        .limit(1);
+
+      if (apErr) {
+        console.log('Error fetching autopay settings:', apErr.message);
+      } else if (apData?.[0]) {
+        const settings = apData[0];
+        setAutoPayEnabled(settings.enabled);
+        setAutoPayDay(settings.day);
+        setAutoPayMethod(settings.method_id ?? '');
       } else {
-        setAutoPayMethod('m1');
+        // Fallback default if not yet created in Supabase
+        setAutoPayEnabled(false);
+        setAutoPayDay(5);
+        setAutoPayMethod('');
       }
     } catch (e) {
-      console.log('Error loading saved settings', e);
+      console.log('Error loading backend settings:', e);
     }
   }, [user?.id]);
 
   useEffect(() => {
     if (user) {
-      loadSavedSettings();
+      fetchWalletAndAutoPay();
     }
-  }, [user, loadSavedSettings]);
+  }, [user, fetchWalletAndAutoPay]);
 
-  // Fetch Supabase data
+  // Fetch Core Billing Data
   const fetchData = useCallback(async () => {
     if (!user) return;
     setError(null);
@@ -178,7 +186,10 @@ export default function PaymentHistoryScreen({ navigation }) {
     setRefreshing(false);
   }, [user?.id]);
 
-  useFocusEffect(useCallback(() => { fetchData(); }, [fetchData]));
+  useFocusEffect(useCallback(() => { 
+    fetchData(); 
+    fetchWalletAndAutoPay();
+  }, [fetchData, fetchWalletAndAutoPay]));
 
   // Download PDF Receipt flow
   const handleDownloadReceipt = useCallback(async (item) => {
@@ -213,36 +224,29 @@ export default function PaymentHistoryScreen({ navigation }) {
     }
   }, [tenantInfo]);
 
-  // Wallet Persistence
-  const saveWallet = async (methodsList) => {
-    if (!user) return;
-    try {
-      const walletKey = `@tenura_wallet_${user.id}`;
-      await AsyncStorage.setItem(walletKey, JSON.stringify(methodsList));
-      setStoredMethods(methodsList);
-    } catch (e) {
-      console.log('Error saving wallet', e);
-    }
-  };
-
+  // Wallet database insertions/deletes
   const handleAddUpi = async () => {
     if (!newUpiId.trim() || !newUpiId.includes('@')) {
-      Alert.alert('Error', 'Please enter a valid UPI ID (e.g. name@upi)');
+      Alert.alert('Error', 'Please enter a valid UPI ID (e.g. name@okaxis)');
       return;
     }
-    const updated = [
-      ...storedMethods,
-      {
-        id: 'upi_' + Date.now(),
+    const { error: addErr } = await supabase
+      .from('stored_payment_methods')
+      .insert({
+        user_id: user.id,
         type: 'upi',
         label: 'UPI Account',
         value: newUpiId.trim().toLowerCase(),
-        active: false,
-      }
-    ];
-    await saveWallet(updated);
-    setNewUpiId('');
-    setIsAddingMethod(false);
+        is_active: storedMethods.length === 0, // active by default if first method
+      });
+
+    if (addErr) {
+      Alert.alert('Error', addErr.message);
+    } else {
+      await fetchWalletAndAutoPay();
+      setNewUpiId('');
+      setIsAddingMethod(false);
+    }
   };
 
   const handleAddCard = async () => {
@@ -252,58 +256,101 @@ export default function PaymentHistoryScreen({ navigation }) {
     }
     const lastFour = newCardNumber.trim().slice(-4);
     const maskedCard = `**** **** **** ${lastFour}`;
-    const updated = [
-      ...storedMethods,
-      {
-        id: 'card_' + Date.now(),
+    const { error: addErr } = await supabase
+      .from('stored_payment_methods')
+      .insert({
+        user_id: user.id,
         type: 'card',
         label: `${newCardName.trim()}`,
         value: maskedCard,
-        active: false,
-      }
-    ];
-    await saveWallet(updated);
-    setNewCardNumber('');
-    setNewCardName('');
-    setNewCardExpiry('');
-    setIsAddingMethod(false);
+        is_active: storedMethods.length === 0,
+      });
+
+    if (addErr) {
+      Alert.alert('Error', addErr.message);
+    } else {
+      await fetchWalletAndAutoPay();
+      setNewCardNumber('');
+      setNewCardName('');
+      setNewCardExpiry('');
+      setIsAddingMethod(false);
+    }
   };
 
   const handleDeleteMethod = async (id) => {
-    const updated = storedMethods.filter(m => m.id !== id);
-    if (autoPayMethod === id) {
-      const nextActive = updated.find(m => m.active)?.id ?? (updated[0]?.id ?? '');
-      setAutoPayMethod(nextActive);
-      await saveAutoPaySettings(autoPayEnabled, autoPayDay, nextActive);
+    const { error: delErr } = await supabase
+      .from('stored_payment_methods')
+      .delete()
+      .eq('id', id);
+
+    if (delErr) {
+      Alert.alert('Error', delErr.message);
+    } else {
+      if (autoPayMethod === id) {
+        const remaining = storedMethods.filter(m => m.id !== id);
+        const nextActive = remaining.find(m => m.is_active)?.id ?? (remaining[0]?.id ?? null);
+        await saveAutoPaySettings(autoPayEnabled, autoPayDay, nextActive);
+      }
+      await fetchWalletAndAutoPay();
     }
-    await saveWallet(updated);
   };
 
   const handleSetMethodActive = async (id) => {
-    const updated = storedMethods.map(m => ({
-      ...m,
-      active: m.id === id,
-    }));
-    await saveWallet(updated);
+    // 1. Clear active flags for user's payment options
+    const { error: err1 } = await supabase
+      .from('stored_payment_methods')
+      .update({ is_active: false })
+      .eq('user_id', user.id);
+
+    if (!err1) {
+      // 2. Set chosen method active
+      const { error: err2 } = await supabase
+        .from('stored_payment_methods')
+        .update({ is_active: true })
+        .eq('id', id);
+
+      if (err2) {
+        Alert.alert('Error', err2.message);
+      }
+    } else {
+      Alert.alert('Error', err1.message);
+    }
+
+    await fetchWalletAndAutoPay();
   };
 
-  // Auto-Pay Persistence
+  // Auto-Pay configuration database upserts
   const saveAutoPaySettings = async (enabled, day, methodId) => {
     if (!user) return;
     try {
-      const autopayKey = `@tenura_autopay_${user.id}`;
-      await AsyncStorage.setItem(autopayKey, JSON.stringify({ enabled, day, method: methodId }));
-      setAutoPayEnabled(enabled);
-      setAutoPayDay(day);
-      setAutoPayMethod(methodId);
+      const { error: upsertErr } = await supabase
+        .from('autopay_settings')
+        .upsert({
+          user_id: user.id,
+          enabled,
+          day,
+          method_id: methodId || null,
+          updated_at: new Date().toISOString(),
+        });
+
+      if (upsertErr) {
+        console.log('Error saving auto-pay:', upsertErr.message);
+        Alert.alert('Error', 'Could not save auto-pay configurations.');
+      } else {
+        setAutoPayEnabled(enabled);
+        setAutoPayDay(day);
+        setAutoPayMethod(methodId || '');
+      }
     } catch (e) {
-      console.log('Error saving autopay settings', e);
+      console.log('Error executing upsert query:', e);
     }
   };
 
-  if (!user) return null;
-
-  const onRefresh = () => { setRefreshing(true); fetchData(); };
+  const onRefresh = () => { 
+    setRefreshing(true); 
+    fetchData(); 
+    fetchWalletAndAutoPay();
+  };
 
   const formatDate = (d) =>
     d
@@ -312,7 +359,7 @@ export default function PaymentHistoryScreen({ navigation }) {
         })
       : '—';
 
-  const selectedMethodObj = storedMethods.find(m => m.id === autoPayMethod) ?? storedMethods[0];
+  const selectedMethodObj = storedMethods.find(m => m.id === autoPayMethod) ?? storedMethods.find(m => m.is_active) ?? storedMethods[0];
 
   if (loading) {
     return (
@@ -581,12 +628,12 @@ export default function PaymentHistoryScreen({ navigation }) {
               <Text style={styles.modalSectionTitle}>Stored Payment Methods</Text>
               
               {storedMethods.length === 0 ? (
-                <Text style={styles.emptyWalletText}>No saved payment options found.</Text>
+                <Text style={styles.emptyWalletText}>No saved payment options found. Please add a billing method.</Text>
               ) : (
                 storedMethods.map((method) => (
                   <TouchableOpacity
                     key={method.id}
-                    style={[styles.walletCard, method.active && styles.walletCardActive]}
+                    style={[styles.walletCard, method.is_active && styles.walletCardActive]}
                     activeOpacity={0.8}
                     onPress={() => handleSetMethodActive(method.id)}
                   >
@@ -602,7 +649,7 @@ export default function PaymentHistoryScreen({ navigation }) {
                       </View>
                     </View>
                     <View style={styles.walletCardRight}>
-                      {method.active && (
+                      {method.is_active && (
                         <MaterialIcons name="check-circle" size={20} color={colors.tertiaryFixedDim} />
                       )}
                       <TouchableOpacity 
@@ -925,6 +972,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     padding: 16,
+  },
+  menuItemPressed: {
+    backgroundColor: colors.surfaceContainerLow,
   },
   menuIconBg: {
     width: 40,

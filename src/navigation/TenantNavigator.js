@@ -12,7 +12,7 @@ import RentPaymentScreen from '../screens/tenant/RentPaymentScreen';
 import PaymentSuccessScreen from '../screens/tenant/PaymentSuccessScreen';
 import MaintenanceRequestScreen from '../screens/tenant/MaintenanceRequestScreen';
 import IssueMessagesScreen from '../screens/shared/IssueMessagesScreen';
-import ProfileScreen from '../screens/shared/ProfileScreen';
+import MenuScreen from '../screens/tenant/MenuScreen';
 import CommunityScreen from '../screens/tenant/CommunityScreen';
 import OfficeInfoScreen from '../screens/tenant/OfficeInfoScreen';
 import AnnouncementsScreen from '../screens/tenant/AnnouncementsScreen';
@@ -92,7 +92,7 @@ export default function TenantNavigator() {
             Payments: 'payments',
             Maintenance: 'build',
             Community: 'business',
-            Profile: 'person',
+            Menu: 'menu',
           };
           return <MaterialIcons name={icons[route.name]} size={size} color={color} />;
         },
@@ -102,7 +102,7 @@ export default function TenantNavigator() {
       <Tab.Screen name="Payments" component={PaymentsStackNav} />
       <Tab.Screen name="Maintenance" component={MaintenanceStackNav} />
       <Tab.Screen name="Community" component={CommunityStackNav} />
-      <Tab.Screen name="Profile" component={ProfileScreen} />
+      <Tab.Screen name="Menu" component={MenuScreen} />
     </Tab.Navigator>
   );
 }

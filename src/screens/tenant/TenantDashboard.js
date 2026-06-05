@@ -280,7 +280,12 @@ export default function TenantDashboard({ navigation }) {
             <View style={styles.quickLinkItem}>
               <TouchableOpacity
                 style={styles.quickLinkCircle}
-                onPress={() => navigation.navigate('Maintenance')}
+                onPress={() => {
+                  navigation.navigate('Maintenance', {
+                    screen: 'MaintenanceRequest',
+                    params: { showForm: true },
+                  });
+                }}
                 activeOpacity={0.7}
               >
                 <MaterialIcons name="build" size={26} color={colors.primary} />

@@ -15,6 +15,7 @@ import {
   Switch,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
@@ -123,6 +124,7 @@ export default function MaintenanceRequestScreen({ navigation, route }) {
     if (route.params?.showForm) {
       setShowFormMode(true);
       setStep(1);
+      navigation.setParams({ showForm: undefined });
     }
   }, [route.params?.showForm]);
 
@@ -146,13 +148,63 @@ export default function MaintenanceRequestScreen({ navigation, route }) {
     setLocationDetails(''); // Clear specific location since types differ
   };
 
+  const handleTakePhoto = async () => {
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'Camera permissions are required to take photos.');
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets?.[0]?.uri) {
+        setHasPhoto(true);
+      }
+    } catch (err) {
+      console.error('Error taking photo:', err.message);
+      Alert.alert('Error', 'Failed to open camera.');
+    }
+  };
+
+  const handleChooseFromLibrary = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'Gallery permissions are required to choose photos.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets?.[0]?.uri) {
+        setHasPhoto(true);
+      }
+    } catch (err) {
+      console.error('Error choosing photo:', err.message);
+      Alert.alert('Error', 'Failed to open photo library.');
+    }
+  };
+
   const handlePhotoPress = () => {
     openPicker(
       'Add Photos (Optional)',
       ['Take Photo', 'Choose from Library', 'Cancel / None'],
-      (option) => {
-        if (option !== 'Cancel / None') {
-          setHasPhoto(true);
+      async (option) => {
+        if (option === 'Take Photo') {
+          await handleTakePhoto();
+        } else if (option === 'Choose from Library') {
+          await handleChooseFromLibrary();
         } else {
           setHasPhoto(false);
         }
@@ -326,6 +378,7 @@ export default function MaintenanceRequestScreen({ navigation, route }) {
     <KeyboardAvoidingView
       style={styles.flex}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 0}
     >
       <View style={styles.container}>
         <ScreenHeader
@@ -337,7 +390,8 @@ export default function MaintenanceRequestScreen({ navigation, route }) {
 
         {showFormMode ? (
           <ScrollView
-            contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}
+            style={styles.flex}
+            contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >
@@ -518,7 +572,8 @@ export default function MaintenanceRequestScreen({ navigation, route }) {
           </ScrollView>
         ) : (
           <ScrollView
-            contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}
+            style={styles.flex}
+            contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
             showsVerticalScrollIndicator={false}
             refreshControl={
               <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
@@ -546,7 +601,14 @@ export default function MaintenanceRequestScreen({ navigation, route }) {
 
             {/* Active request */}
             <View style={styles.section}>
-              <SectionHeader title="Active Request" />
+              <SectionHeader
+                title="Active Request"
+                actionLabel="+ New Request"
+                onAction={() => {
+                  setStep(1);
+                  setShowFormMode(true);
+                }}
+              />
               {activeRequest ? (
                 <View style={styles.activeCard}>
                   <View style={styles.activeCardHeader}>

@@ -41,6 +41,11 @@ export default function ResidentIssuesScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [expandedIssueIds, setExpandedIssueIds] = useState({});
+
+  const toggleExpand = (id) => {
+    setExpandedIssueIds(prev => ({ ...prev, [id]: !prev[id] }));
+  };
 
   const fetchIssues = useCallback(async () => {
     if (!user) return;
@@ -108,80 +113,155 @@ export default function ResidentIssuesScreen({ navigation }) {
   const timeAgo = (date) => {
     const diff = Date.now() - new Date(date).getTime();
     const hours = Math.floor(diff / 3_600_000);
-    if (hours < 24) return `${hours}h ago`;
+    if (hours < 24) return `${hours > 0 ? hours + 'h' : 'Just now'} ago`;
     const days = Math.floor(hours / 24);
     return `${days}d ago`;
   };
 
-  const renderIssue = ({ item }) => (
-    <View style={styles.issueCard}>
-      <View style={styles.issueHeader}>
-        <Text style={styles.caseNum}>{item.case_number}</Text>
-        <StatusChip label={item.priority} variant={priorityVariant(item.priority)} />
-      </View>
-      <Text style={styles.issueSubject}>{item.subject}</Text>
-      <View style={styles.issueMeta}>
-        <MaterialIcons name="person" size={12} color={colors.onSurfaceVariant} />
-        <Text style={styles.issueMetaText}>
-          {item.tenants?.full_name} · Unit {item.tenants?.unit_number}
-        </Text>
-        <Text style={styles.issueMetaDot}>·</Text>
-        <Text style={styles.issueMetaText}>{timeAgo(item.created_at)}</Text>
-      </View>
-      {item.details ? (
-        <Text style={styles.issueDetails} numberOfLines={2}>{item.details}</Text>
-      ) : null}
+  const renderIssue = ({ item }) => {
+    const isExpanded = expandedIssueIds[item.id];
+    return (
+      <View style={styles.issueCard}>
+        <TouchableOpacity
+          activeOpacity={0.9}
+          onPress={() => toggleExpand(item.id)}
+        >
+          <View style={styles.issueHeader}>
+            <View style={styles.caseNumContainer}>
+              <Text style={styles.caseNum}>{item.case_number}</Text>
+              {item.properties?.name ? (
+                <Text style={styles.propertyNameHeader}> · {item.properties.name}</Text>
+              ) : null}
+            </View>
+            <View style={styles.headerRight}>
+              <StatusChip label={item.priority} variant={priorityVariant(item.priority)} />
+              <MaterialIcons
+                name={isExpanded ? 'keyboard-arrow-up' : 'keyboard-arrow-down'}
+                size={20}
+                color={colors.outline}
+              />
+            </View>
+          </View>
+          <Text style={styles.issueSubject}>{item.subject}</Text>
+          <View style={styles.issueMeta}>
+            <MaterialIcons name="person" size={12} color={colors.onSurfaceVariant} />
+            <Text style={styles.issueMetaText}>
+              {item.tenants?.full_name} · Unit {item.tenants?.unit_number}
+            </Text>
+            <Text style={styles.issueMetaDot}>·</Text>
+            <Text style={styles.issueMetaText}>{timeAgo(item.created_at)}</Text>
+          </View>
 
-      {/* Progress bar */}
-      <View style={styles.progressTrack}>
-        <View style={[styles.progressFill, { width: `${item.resolution_progress}%` }]} />
-      </View>
-      <Text style={styles.progressLabel}>{item.resolution_progress}% resolved</Text>
+          {isExpanded ? (
+            <View style={styles.expandedDetailsContainer}>
+              {item.details ? (
+                <View style={styles.detailsRow}>
+                  <Text style={styles.detailsLabel}>Description</Text>
+                  <Text style={styles.detailsValue}>{item.details}</Text>
+                </View>
+              ) : null}
 
-      {/* Actions */}
-      {item.status !== 'resolved' ? (
-        <View style={styles.actionRow}>
-          <TouchableOpacity
-            style={styles.actionBtn}
-            onPress={() => markResolved(item.id)}
-          >
-            <MaterialIcons name="check-circle" size={14} color={colors.onTertiaryContainer} />
-            <Text style={[styles.actionText, { color: colors.onTertiaryContainer }]}>Mark Resolved</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.actionBtn}
-            onPress={() => navigation.navigate('IssueMessages', {
-              issueId: item.id,
-              caseNumber: item.case_number,
-              subject: item.subject,
-              tenantName: item.tenants?.full_name,
-              unitNumber: item.tenants?.unit_number,
-            })}
-          >
-            <MaterialIcons name="message" size={14} color={colors.primary} />
-            <Text style={[styles.actionText, { color: colors.primary }]}>Message Resident</Text>
-          </TouchableOpacity>
+              {/* Structured fields grid */}
+              <View style={styles.detailsGrid}>
+                {item.category ? (
+                  <View style={styles.detailsGridItem}>
+                    <Text style={styles.gridLabel}>Category</Text>
+                    <Text style={styles.gridValue}>{item.category}</Text>
+                  </View>
+                ) : null}
+
+                {item.location_type ? (
+                  <View style={styles.detailsGridItem}>
+                    <Text style={styles.gridLabel}>Location</Text>
+                    <Text style={styles.gridValue}>
+                      {item.location_type}{item.location_details ? ` (${item.location_details})` : ''}
+                    </Text>
+                  </View>
+                ) : null}
+
+                {item.contact_preference ? (
+                  <View style={styles.detailsGridItem}>
+                    <Text style={styles.gridLabel}>Contact Via</Text>
+                    <Text style={styles.gridValue}>{item.contact_preference}</Text>
+                  </View>
+                ) : null}
+
+                <View style={styles.detailsGridItem}>
+                  <Text style={styles.gridLabel}>Has Animal</Text>
+                  <Text style={styles.gridValue}>{item.has_animal ? 'Yes 🐾' : 'No'}</Text>
+                </View>
+
+                <View style={styles.detailsGridItem}>
+                  <Text style={styles.gridLabel}>Access Permitted</Text>
+                  <Text style={styles.gridValue}>{item.allow_entry ? 'Yes ✅' : 'No ❌'}</Text>
+                </View>
+              </View>
+
+              {item.entry_note ? (
+                <View style={styles.entryNoteBox}>
+                  <Text style={styles.entryNoteLabel}>Entry Note:</Text>
+                  <Text style={styles.entryNoteValue}>"{item.entry_note}"</Text>
+                </View>
+              ) : null}
+            </View>
+          ) : (
+            item.details ? (
+              <Text style={styles.issueDetails} numberOfLines={2}>{item.details}</Text>
+            ) : null
+          )}
+        </TouchableOpacity>
+
+        {/* Progress bar */}
+        <View style={styles.progressTrack}>
+          <View style={[styles.progressFill, { width: `${item.resolution_progress}%` }]} />
         </View>
-      ) : (
-        <View style={styles.actionRow}>
-          <StatusChip label="Resolved" variant="active" />
-          <TouchableOpacity
-            style={styles.actionBtn}
-            onPress={() => navigation.navigate('IssueMessages', {
-              issueId: item.id,
-              caseNumber: item.case_number,
-              subject: item.subject,
-              tenantName: item.tenants?.full_name,
-              unitNumber: item.tenants?.unit_number,
-            })}
-          >
-            <MaterialIcons name="message" size={14} color={colors.primary} />
-            <Text style={[styles.actionText, { color: colors.primary }]}>View Messages</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-    </View>
-  );
+        <Text style={styles.progressLabel}>{item.resolution_progress}% resolved</Text>
+
+        {/* Actions */}
+        {item.status !== 'resolved' ? (
+          <View style={styles.actionRow}>
+            <TouchableOpacity
+              style={styles.actionBtn}
+              onPress={() => markResolved(item.id)}
+            >
+              <MaterialIcons name="check-circle" size={14} color={colors.onTertiaryContainer} />
+              <Text style={[styles.actionText, { color: colors.onTertiaryContainer }]}>Mark Resolved</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.actionBtn}
+              onPress={() => navigation.navigate('IssueMessages', {
+                issueId: item.id,
+                caseNumber: item.case_number,
+                subject: item.subject,
+                tenantName: item.tenants?.full_name,
+                unitNumber: item.tenants?.unit_number,
+              })}
+            >
+              <MaterialIcons name="message" size={14} color={colors.primary} />
+              <Text style={[styles.actionText, { color: colors.primary }]}>Message Resident</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={styles.actionRow}>
+            <StatusChip label="Resolved" variant="active" />
+            <TouchableOpacity
+              style={styles.actionBtn}
+              onPress={() => navigation.navigate('IssueMessages', {
+                issueId: item.id,
+                caseNumber: item.case_number,
+                subject: item.subject,
+                tenantName: item.tenants?.full_name,
+                unitNumber: item.tenants?.unit_number,
+              })}
+            >
+              <MaterialIcons name="message" size={14} color={colors.primary} />
+              <Text style={[styles.actionText, { color: colors.primary }]}>View Messages</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+    );
+  };
 
   if (loading) {
     return (
@@ -323,12 +403,88 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 6,
   },
+  caseNumContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  propertyNameHeader: {
+    fontFamily: fonts.interMedium,
+    fontSize: 11,
+    color: colors.onSurfaceVariant,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   caseNum: {
     fontFamily: fonts.interSemiBold,
     fontSize: 11,
     color: colors.onSurfaceVariant,
     letterSpacing: 0.5,
     textTransform: 'uppercase',
+  },
+  expandedDetailsContainer: {
+    marginTop: 8,
+    marginBottom: 12,
+    backgroundColor: colors.surfaceContainerLow,
+    borderRadius: 8,
+    padding: 12,
+    gap: 12,
+  },
+  detailsRow: {
+    gap: 4,
+  },
+  detailsLabel: {
+    fontFamily: fonts.interSemiBold,
+    fontSize: 11,
+    color: colors.outline,
+    textTransform: 'uppercase',
+  },
+  detailsValue: {
+    fontFamily: fonts.interRegular,
+    fontSize: 13,
+    color: colors.onSurface,
+    lineHeight: 18,
+  },
+  detailsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  detailsGridItem: {
+    width: '47%',
+    gap: 2,
+  },
+  gridLabel: {
+    fontFamily: fonts.interSemiBold,
+    fontSize: 10,
+    color: colors.outline,
+    textTransform: 'uppercase',
+  },
+  gridValue: {
+    fontFamily: fonts.interMedium,
+    fontSize: 12,
+    color: colors.onSurface,
+  },
+  entryNoteBox: {
+    backgroundColor: colors.surfaceContainerLowest,
+    padding: 8,
+    borderRadius: 6,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.primary,
+  },
+  entryNoteLabel: {
+    fontFamily: fonts.interSemiBold,
+    fontSize: 10,
+    color: colors.outline,
+  },
+  entryNoteValue: {
+    fontFamily: fonts.interRegular,
+    fontSize: 12,
+    color: colors.onSurfaceVariant,
+    fontStyle: 'italic',
+    marginTop: 2,
   },
   issueSubject: {
     fontFamily: fonts.manropeSemiBold,

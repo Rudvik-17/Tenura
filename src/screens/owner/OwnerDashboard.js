@@ -209,13 +209,19 @@ export default function OwnerDashboard({ navigation }) {
             />
           </View>
           <View style={[styles.metricsRow, { marginTop: 12 }]}>
-            <MetricCard
-              icon="report-problem"
-              value={String(metrics?.activeIssues ?? 0).padStart(2, '0')}
-              label="Active Issues"
-              trend={metrics?.urgentIssues > 0 ? `${metrics.urgentIssues} urgent` : undefined}
-              trendUp={false}
-            />
+            <TouchableOpacity
+              style={{ flex: 1 }}
+              onPress={() => navigation.navigate('Issues')}
+              activeOpacity={0.8}
+            >
+              <MetricCard
+                icon="report-problem"
+                value={String(metrics?.activeIssues ?? 0).padStart(2, '0')}
+                label="Active Issues"
+                trend={metrics?.urgentIssues > 0 ? `${metrics.urgentIssues} urgent` : undefined}
+                trendUp={false}
+              />
+            </TouchableOpacity>
             <View style={styles.metricGap} />
             <MetricCard
               icon="event"

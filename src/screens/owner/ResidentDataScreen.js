@@ -14,7 +14,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
-import { colors } from '../../theme/colors';
+import { useTheme } from '../../context/ThemeContext';
 import { fonts } from '../../theme/typography';
 import ScreenHeader from '../../components/ScreenHeader';
 import SectionHeader from '../../components/SectionHeader';
@@ -23,6 +23,8 @@ import MetricCard from '../../components/MetricCard';
 import PrimaryButton from '../../components/PrimaryButton';
 
 export default function ResidentDataScreen({ navigation }) {
+  const { colors } = useTheme();
+  const styles = getStyles(colors);
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
 
@@ -192,7 +194,7 @@ export default function ResidentDataScreen({ navigation }) {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
   centered: {
     flex: 1,
@@ -259,7 +261,7 @@ const styles = StyleSheet.create({
   avatarInitial: {
     fontFamily: fonts.manropeBold,
     fontSize: 18,
-    color: colors.onPrimary,
+    color: colors.onPrimaryContainer,
   },
   tenantInfo: { flex: 1 },
   tenantName: {

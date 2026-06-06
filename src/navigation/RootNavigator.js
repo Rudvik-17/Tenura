@@ -3,7 +3,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { useAuth } from '../context/AuthContext';
 import { ActivityIndicator, View } from 'react-native';
-import { colors } from '../theme/colors';
+import { useTheme } from '../context/ThemeContext';
 
 import LoginScreen from '../screens/auth/LoginScreen';
 import SignUpScreen from '../screens/auth/SignUpScreen';
@@ -14,6 +14,7 @@ import TenantNavigator from './TenantNavigator';
 const Stack = createStackNavigator();
 
 export default function RootNavigator() {
+  const { colors } = useTheme();
   const { user, role, loading } = useAuth();
 
   if (loading) {

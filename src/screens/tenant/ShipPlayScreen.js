@@ -10,12 +10,14 @@ import {
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors } from '../../theme/colors';
+import { useTheme } from '../../context/ThemeContext';
 import { fonts } from '../../theme/typography';
 import ScreenHeader from '../../components/ScreenHeader';
 import SectionHeader from '../../components/SectionHeader';
 
 export default function ShipPlayScreen({ navigation }) {
+  const { colors } = useTheme();
+  const styles = getStyles(colors);
   const insets = useSafeAreaInsets();
 
   const amenities = [
@@ -174,7 +176,7 @@ export default function ShipPlayScreen({ navigation }) {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.surface,
@@ -193,12 +195,13 @@ const styles = StyleSheet.create({
   introTitle: {
     fontFamily: fonts.manropeBold,
     fontSize: 18,
-    color: colors.onPrimary,
+    color: colors.onPrimaryContainer,
   },
   introDesc: {
     fontFamily: fonts.interRegular,
     fontSize: 13,
-    color: 'rgba(255,255,255,0.7)',
+    color: colors.onPrimaryContainer,
+    opacity: 0.7,
     lineHeight: 18,
   },
   section: {

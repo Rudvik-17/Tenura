@@ -13,7 +13,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
-import { colors } from '../../theme/colors';
+import { useTheme } from '../../context/ThemeContext';
 import { fonts } from '../../theme/typography';
 import MetricCard from '../../components/MetricCard';
 import SectionHeader from '../../components/SectionHeader';
@@ -21,6 +21,8 @@ import ScreenHeader from '../../components/ScreenHeader';
 import PrimaryButton from '../../components/PrimaryButton';
 
 export default function OwnerDashboard({ navigation }) {
+  const { colors } = useTheme();
+  const styles = getStyles(colors);
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
 
@@ -320,7 +322,7 @@ export default function OwnerDashboard({ navigation }) {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
   scroll: { flex: 1 },
   centered: {
@@ -341,20 +343,22 @@ const styles = StyleSheet.create({
     fontFamily: fonts.interSemiBold,
     fontSize: 11,
     letterSpacing: 1.5,
-    color: 'rgba(255,255,255,0.55)',
+    color: colors.onPrimaryContainer,
+    opacity: 0.6,
     textTransform: 'uppercase',
     marginBottom: 8,
   },
   heroValue: {
     fontFamily: fonts.manropeBold,
     fontSize: 38,
-    color: colors.onPrimary,
+    color: colors.onPrimaryContainer,
     marginBottom: 4,
   },
   heroSubtitle: {
     fontFamily: fonts.interRegular,
     fontSize: 13,
-    color: 'rgba(255,255,255,0.65)',
+    color: colors.onPrimaryContainer,
+    opacity: 0.7,
   },
 
   metricsGrid: {

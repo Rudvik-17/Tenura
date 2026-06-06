@@ -17,10 +17,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../../lib/supabase';
 import { showMessageSent } from '../../lib/notifications';
 import { useAuth } from '../../context/AuthContext';
-import { colors } from '../../theme/colors';
+import { useTheme } from '../../context/ThemeContext';
 import { fonts } from '../../theme/typography';
 
 export default function IssueMessagesScreen({ navigation, route }) {
+  const { colors } = useTheme();
+  const styles = getStyles(colors);
   const insets = useSafeAreaInsets();
   const { user, role } = useAuth();
   const { issueId, caseNumber, subject, tenantName, unitNumber } = route?.params ?? {};
@@ -282,7 +284,7 @@ export default function IssueMessagesScreen({ navigation, route }) {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors) => StyleSheet.create({
   flex: { flex: 1 },
   container: { flex: 1, backgroundColor: colors.surface },
 

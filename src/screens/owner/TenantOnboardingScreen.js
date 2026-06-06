@@ -16,7 +16,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
-import { colors } from '../../theme/colors';
+import { useTheme } from '../../context/ThemeContext';
 import { fonts } from '../../theme/typography';
 import ScreenHeader from '../../components/ScreenHeader';
 import PrimaryButton from '../../components/PrimaryButton';
@@ -33,6 +33,8 @@ const formatDate = (d) =>
 const toISODate = (d) => (d ? d.toISOString().split('T')[0] : '');
 
 export default function TenantOnboardingScreen({ navigation }) {
+  const { colors } = useTheme();
+  const styles = getStyles(colors);
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
 
@@ -591,6 +593,8 @@ export default function TenantOnboardingScreen({ navigation }) {
 // ── Small helper components ───────────────────────────────────────────────────
 
 function Field({ label, error, children }) {
+  const { colors } = useTheme();
+  const styles = getStyles(colors);
   return (
     <View style={styles.fieldWrapper}>
       <Text style={styles.fieldLabel}>{label}</Text>
@@ -601,6 +605,8 @@ function Field({ label, error, children }) {
 }
 
 function ReviewSection({ icon, label, children }) {
+  const { colors } = useTheme();
+  const styles = getStyles(colors);
   return (
     <View style={styles.reviewSection}>
       <View style={styles.reviewSectionHeader}>
@@ -613,7 +619,7 @@ function ReviewSection({ icon, label, children }) {
 }
 
 // ── Styles ────────────────────────────────────────────────────────────────────
-const styles = StyleSheet.create({
+const getStyles = (colors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
   flex: { flex: 1 },
   scroll: { flexGrow: 1 },

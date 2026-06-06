@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,21 +9,46 @@ import {
   Platform,
   ScrollView,
   Alert,
+  Animated,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../../lib/supabase';
-import { colors } from '../../theme/colors';
+import { useTheme } from '../../context/ThemeContext';
 import { fonts } from '../../theme/typography';
 import PrimaryButton from '../../components/PrimaryButton';
 
 export default function LoginScreen({ navigation }) {
+  const { colors } = useTheme();
+  const styles = getStyles(colors);
   const insets = useSafeAreaInsets();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [showPassword, setShowPassword] = useState(false);
+
+  const animValue = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (loading) {
+      animValue.setValue(0);
+      Animated.loop(
+        Animated.timing(animValue, {
+          toValue: 1,
+          duration: 1500,
+          useNativeDriver: true,
+        })
+      ).start();
+    } else {
+      animValue.stopAnimation();
+    }
+  }, [loading]);
+
+  const translateX = animValue.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-150, 350],
+  });
 
   const handleSignIn = async () => {
     setError(null);
@@ -77,6 +102,12 @@ export default function LoginScreen({ navigation }) {
           <Text style={styles.welcomeSubtitle}>
             Access your precision portfolio dashboard
           </Text>
+
+          {loading && (
+            <View style={styles.loadingBarContainer}>
+              <Animated.View style={[styles.loadingBar, { transform: [{ translateX }] }]} />
+            </View>
+          )}
 
           {/* Email */}
           <Text style={styles.fieldLabel}>EMAIL</Text>
@@ -150,7 +181,7 @@ export default function LoginScreen({ navigation }) {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors) => StyleSheet.create({
   flex: { flex: 1, backgroundColor: colors.surface },
 
   scroll: { flexGrow: 1 },
@@ -166,13 +197,13 @@ const styles = StyleSheet.create({
     fontFamily: fonts.manropeBold,
     fontSize: 22,
     letterSpacing: 4,
-    color: colors.onPrimary,
+    color: '#FFFFFF',
     marginBottom: 6,
   },
   tagline: {
     fontFamily: fonts.interRegular,
     fontSize: 13,
-    color: 'rgba(255,255,255,0.6)',
+    color: 'rgba(255,255,255,0.85)',
     letterSpacing: 0.5,
   },
   heroDivider: {
@@ -275,5 +306,20 @@ const styles = StyleSheet.create({
     fontFamily: fonts.interMedium,
     fontSize: 12,
     color: colors.onSurfaceVariant,
+  },
+  loadingBarContainer: {
+    height: 4,
+    backgroundColor: colors.surfaceContainerHighest,
+    overflow: 'hidden',
+    borderRadius: 2,
+    marginTop: -8,
+    marginBottom: 20,
+    width: '100%',
+  },
+  loadingBar: {
+    width: 150,
+    height: '100%',
+    backgroundColor: colors.primary,
+    borderRadius: 2,
   },
 });

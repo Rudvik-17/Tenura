@@ -3,10 +3,12 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import PropTypes from 'prop-types';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors } from '../theme/colors';
+import { useTheme } from '../context/ThemeContext';
 import { fonts } from '../theme/typography';
 
 export default function ScreenHeader({ title, showBack, onBack, showBell, onBell, hideLogo }) {
+  const { colors } = useTheme();
+  const styles = getStyles(colors);
   const insets = useSafeAreaInsets();
 
   return (
@@ -14,7 +16,7 @@ export default function ScreenHeader({ title, showBack, onBack, showBell, onBell
       <View style={styles.left}>
         {showBack ? (
           <TouchableOpacity onPress={onBack} style={styles.backBtn} activeOpacity={0.7}>
-            <MaterialIcons name="arrow-back" size={22} color={colors.onPrimary} />
+            <MaterialIcons name="arrow-back" size={22} color="#FFFFFF" />
           </TouchableOpacity>
         ) : hideLogo ? (
           <View style={{ width: 40 }} />
@@ -26,7 +28,7 @@ export default function ScreenHeader({ title, showBack, onBack, showBell, onBell
       <View style={styles.right}>
         {showBell ? (
           <TouchableOpacity onPress={onBell} style={styles.bellBtn} activeOpacity={0.7}>
-            <MaterialIcons name="notifications-none" size={22} color={colors.onPrimary} />
+            <MaterialIcons name="notifications-none" size={22} color="#FFFFFF" />
           </TouchableOpacity>
         ) : (
           <View style={{ width: 40 }} />
@@ -54,7 +56,7 @@ ScreenHeader.defaultProps = {
   hideLogo: false,
 };
 
-const styles = StyleSheet.create({
+const getStyles = (colors) => StyleSheet.create({
   container: {
     backgroundColor: colors.primary,
     flexDirection: 'row',
@@ -75,12 +77,12 @@ const styles = StyleSheet.create({
     fontFamily: fonts.manropeBold,
     fontSize: 14,
     letterSpacing: 2,
-    color: colors.onPrimary,
+    color: '#FFFFFF',
   },
   title: {
     fontFamily: fonts.manropeSemiBold,
     fontSize: 17,
-    color: colors.onPrimary,
+    color: '#FFFFFF',
     flex: 2,
     textAlign: 'center',
   },

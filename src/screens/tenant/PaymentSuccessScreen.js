@@ -14,7 +14,7 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
-import { colors } from '../../theme/colors';
+import { useTheme } from '../../context/ThemeContext';
 import { fonts } from '../../theme/typography';
 import { buildReceiptHTML } from '../../lib/receiptHTML';
 
@@ -25,6 +25,8 @@ const METHOD_LABELS = {
 };
 
 export default function PaymentSuccessScreen({ navigation, route }) {
+  const { colors } = useTheme();
+  const styles = getStyles(colors);
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const { amount = 0, method = 'gpay', txnId = '', paidAt = new Date().toISOString() } = route?.params ?? {};
@@ -159,7 +161,7 @@ export default function PaymentSuccessScreen({ navigation, route }) {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.primary,

@@ -2,10 +2,12 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import PropTypes from 'prop-types';
 import { MaterialIcons } from '@expo/vector-icons';
-import { colors } from '../theme/colors';
+import { useTheme } from '../context/ThemeContext';
 import { fonts } from '../theme/typography';
 
 export default function MetricCard({ icon, value, label, trend, trendUp }) {
+  const { colors } = useTheme();
+  const styles = getStyles(colors);
   return (
     <View style={styles.card}>
       <MaterialIcons name={icon} size={20} color={colors.secondary} style={styles.icon} />
@@ -40,7 +42,7 @@ MetricCard.defaultProps = {
   trendUp: true,
 };
 
-const styles = StyleSheet.create({
+const getStyles = (colors) => StyleSheet.create({
   card: {
     backgroundColor: colors.surfaceContainerLowest,
     borderRadius: 12,

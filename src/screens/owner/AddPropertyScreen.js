@@ -14,7 +14,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
-import { colors } from '../../theme/colors';
+import { useTheme } from '../../context/ThemeContext';
 import { fonts } from '../../theme/typography';
 import ScreenHeader from '../../components/ScreenHeader';
 import PrimaryButton from '../../components/PrimaryButton';
@@ -30,6 +30,8 @@ const PROPERTY_TYPES = [
 ];
 
 export default function AddPropertyScreen({ navigation }) {
+  const { colors } = useTheme();
+  const styles = getStyles(colors);
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
 
@@ -394,6 +396,8 @@ export default function AddPropertyScreen({ navigation }) {
 }
 
 function ReviewDetail({ icon, label, value, accent, last }) {
+  const { colors } = useTheme();
+  const styles = getStyles(colors);
   return (
     <View style={[styles.reviewDetailRow, last && { marginBottom: 0 }]}>
       <MaterialIcons
@@ -411,7 +415,7 @@ function ReviewDetail({ icon, label, value, accent, last }) {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
   flex: { flex: 1 },
 

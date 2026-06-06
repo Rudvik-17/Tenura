@@ -10,7 +10,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
-import { colors } from '../../theme/colors';
+import { useTheme } from '../../context/ThemeContext';
 import { fonts } from '../../theme/typography';
 import PrimaryButton from '../../components/PrimaryButton';
 
@@ -34,6 +34,8 @@ const ROLES = [
 ];
 
 export default function RoleSelectionScreen() {
+  const { colors } = useTheme();
+  const styles = getStyles(colors);
   const insets = useSafeAreaInsets();
   const { user, refetchRole } = useAuth();
   const [loading, setLoading] = useState(null); // 'owner' | 'tenant' | null
@@ -157,7 +159,7 @@ export default function RoleSelectionScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.surface,

@@ -16,13 +16,22 @@ import FinanceOverviewScreen from '../screens/owner/FinanceOverviewScreen';
 import RentCollectionScreen from '../screens/owner/RentCollectionScreen';
 import ResidentIssuesScreen from '../screens/owner/ResidentIssuesScreen';
 import IssueMessagesScreen from '../screens/shared/IssueMessagesScreen';
-import ProfileScreen from '../screens/shared/ProfileScreen';
+
+import MenuScreen from '../screens/owner/MenuScreen';
+import LeaseDocumentsScreen from '../screens/owner/LeaseDocumentsScreen';
+import CommunityScreen from '../screens/owner/CommunityScreen';
+import OfficeProfileScreen from '../screens/owner/OfficeProfileScreen';
+import AnnouncementsScreen from '../screens/owner/AnnouncementsScreen';
+import MessagesAlertsScreen from '../screens/owner/MessagesAlertsScreen';
+import ShipPlayScreen from '../screens/owner/ShipPlayScreen';
 
 const Tab = createBottomTabNavigator();
 const PortfolioStack = createStackNavigator();
 const ResidentsStack = createStackNavigator();
 const FinanceStack = createStackNavigator();
 const IssuesStack = createStackNavigator();
+const CommunityStack = createStackNavigator();
+const MenuStack = createStackNavigator();
 
 function PortfolioStackNav() {
   return (
@@ -63,6 +72,27 @@ function IssuesStackNav() {
   );
 }
 
+function CommunityStackNav() {
+  return (
+    <CommunityStack.Navigator screenOptions={{ headerShown: false }}>
+      <CommunityStack.Screen name="CommunityMain" component={CommunityScreen} />
+      <CommunityStack.Screen name="OfficeProfile" component={OfficeProfileScreen} />
+      <CommunityStack.Screen name="Announcements" component={AnnouncementsScreen} />
+      <CommunityStack.Screen name="MessagesAlerts" component={MessagesAlertsScreen} />
+      <CommunityStack.Screen name="ShipPlay" component={ShipPlayScreen} />
+    </CommunityStack.Navigator>
+  );
+}
+
+function MenuStackNav() {
+  return (
+    <MenuStack.Navigator screenOptions={{ headerShown: false }}>
+      <MenuStack.Screen name="MenuMain" component={MenuScreen} />
+      <MenuStack.Screen name="LeaseDocuments" component={LeaseDocumentsScreen} />
+    </MenuStack.Navigator>
+  );
+}
+
 const TAB_BAR_STYLE = {
   backgroundColor: colors.primary,
   borderTopWidth: 0,
@@ -90,7 +120,8 @@ export default function OwnerNavigator() {
             Residents: 'groups',
             Finance: 'payments',
             Issues: 'report-problem',
-            Profile: 'person',
+            Community: 'business',
+            Menu: 'menu',
           };
           return <MaterialIcons name={icons[route.name]} size={size} color={color} />;
         },
@@ -100,7 +131,8 @@ export default function OwnerNavigator() {
       <Tab.Screen name="Residents" component={ResidentsStackNav} />
       <Tab.Screen name="Finance" component={FinanceStackNav} />
       <Tab.Screen name="Issues" component={IssuesStackNav} />
-      <Tab.Screen name="Profile" component={ProfileScreen} />
+      <Tab.Screen name="Community" component={CommunityStackNav} />
+      <Tab.Screen name="Menu" component={MenuStackNav} />
     </Tab.Navigator>
   );
 }

@@ -30,6 +30,7 @@ export default function MessagesAlertsScreen({ navigation }) {
   const [refreshing, setRefreshing] = useState(false);
   const [alerts, setAlerts] = useState([]);
   const [properties, setProperties] = useState([]);
+  const [tenants, setTenants] = useState([]);
 
   // Modal State
   const [modalVisible, setModalVisible] = useState(false);
@@ -58,29 +59,39 @@ export default function MessagesAlertsScreen({ navigation }) {
     }
   }, [user?.id]);
 
-  const fetchProperties = useCallback(async () => {
+  const fetchPropertiesAndTenants = useCallback(async () => {
     if (!user) return;
     try {
-      const { data, error } = await supabase
+      const { data: propsData, error: propsErr } = await supabase
         .from('properties')
         .select('id, name')
         .eq('owner_id', user.id)
         .order('name', { ascending: true });
 
-      if (error) throw error;
-      setProperties(data ?? []);
-      if (data && data.length > 0) {
-        setSelectedPropId(data[0].id);
+      if (propsErr) throw propsErr;
+      setProperties(propsData ?? []);
+      if (propsData && propsData.length > 0) {
+        setSelectedPropId(propsData[0].id);
       }
+
+      const { data: tenantsData, error: tenantsErr } = await supabase
+        .from('tenants')
+        .select('id, full_name, unit_number, property_id')
+        .eq('owner_id', user.id)
+        .eq('status', 'active')
+        .order('full_name', { ascending: true });
+
+      if (tenantsErr) throw tenantsErr;
+      setTenants(tenantsData ?? []);
     } catch (err) {
-      console.error('Error fetching properties:', err.message);
+      console.error('Error fetching properties and tenants:', err.message);
     }
   }, [user?.id]);
 
   useEffect(() => {
     fetchAlerts();
-    fetchProperties();
-  }, [fetchAlerts, fetchProperties]);
+    fetchPropertiesAndTenants();
+  }, [fetchAlerts, fetchPropertiesAndTenants]);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -311,6 +322,31 @@ export default function MessagesAlertsScreen({ navigation }) {
                     </Text>
                   </TouchableOpacity>
                 ))}
+              </View>
+
+              {/* Targeted Residents Audience List */}
+              <Text style={styles.label}>Targeted Audience</Text>
+              <View style={styles.audienceBox}>
+                {(() => {
+                  const targetTenants = tenants.filter(t => t.property_id === selectedPropId);
+                  if (targetTenants.length === 0) {
+                    return (
+                      <Text style={styles.emptyAudienceText}>
+                        No active residents currently registered at this property.
+                      </Text>
+                    );
+                  }
+                  return (
+                    <View style={styles.audienceContent}>
+                      <Text style={styles.audienceTitle}>
+                        Will notify {targetTenants.length} resident(s):
+                      </Text>
+                      <Text style={styles.audienceListText}>
+                        {targetTenants.map(t => `${t.full_name} (Unit ${t.unit_number || 'N/A'})`).join(', ')}
+                      </Text>
+                    </View>
+                  );
+                })()}
               </View>
 
               {/* Alert Type Selector */}
@@ -559,5 +595,31 @@ const styles = StyleSheet.create({
   },
   modalActionRow: {
     marginTop: 24,
+  },
+  audienceBox: {
+    backgroundColor: colors.surfaceContainerLow,
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 8,
+  },
+  emptyAudienceText: {
+    fontFamily: fonts.interRegular,
+    fontSize: 12,
+    color: colors.outline,
+    fontStyle: 'italic',
+  },
+  audienceContent: {
+    gap: 4,
+  },
+  audienceTitle: {
+    fontFamily: fonts.interSemiBold,
+    fontSize: 12,
+    color: colors.onSurface,
+  },
+  audienceListText: {
+    fontFamily: fonts.interRegular,
+    fontSize: 12,
+    color: colors.onSurfaceVariant,
+    lineHeight: 16,
   },
 });

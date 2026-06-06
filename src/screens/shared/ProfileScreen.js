@@ -10,13 +10,15 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
-import { colors } from '../../theme/colors';
+import { useTheme } from '../../context/ThemeContext';
 import { fonts } from '../../theme/typography';
 import ScreenHeader from '../../components/ScreenHeader';
 
 const APP_VERSION = '1.0.0';
 
 export default function ProfileScreen() {
+  const { colors } = useTheme();
+  const styles = getStyles(colors);
   const insets = useSafeAreaInsets();
   const { user, role, clearRole } = useAuth();
   const [signingOut, setSigningOut] = useState(false);
@@ -129,7 +131,7 @@ export default function ProfileScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.surface,
@@ -158,7 +160,7 @@ const styles = StyleSheet.create({
   avatarInitials: {
     fontFamily: fonts.manropeBold,
     fontSize: 32,
-    color: colors.onPrimary,
+    color: colors.onPrimaryContainer,
   },
   emailText: {
     fontFamily: fonts.interMedium,

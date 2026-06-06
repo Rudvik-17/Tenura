@@ -13,11 +13,13 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
-import { colors } from '../../theme/colors';
+import { useTheme } from '../../context/ThemeContext';
 import { fonts } from '../../theme/typography';
 import ScreenHeader from '../../components/ScreenHeader';
 
 export default function MenuScreen({ navigation }) {
+  const { colors, theme, toggleTheme } = useTheme();
+  const styles = getStyles(colors);
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
 
@@ -203,6 +205,12 @@ export default function MenuScreen({ navigation }) {
       icon: 'settings',
       action: handleSettings,
     },
+    {
+      id: 'theme',
+      label: `Theme: ${theme === 'dark' ? 'Dark' : 'Light'}`,
+      icon: theme === 'dark' ? 'dark-mode' : 'light-mode',
+      action: toggleTheme,
+    },
   ];
 
   return (
@@ -265,7 +273,7 @@ export default function MenuScreen({ navigation }) {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.surface,

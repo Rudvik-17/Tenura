@@ -15,7 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../../lib/supabase';
 import { showMaintenanceUpdate } from '../../lib/notifications';
 import { useAuth } from '../../context/AuthContext';
-import { colors } from '../../theme/colors';
+import { useTheme } from '../../context/ThemeContext';
 import { fonts } from '../../theme/typography';
 import ScreenHeader from '../../components/ScreenHeader';
 import SectionHeader from '../../components/SectionHeader';
@@ -33,6 +33,8 @@ const priorityVariant = (priority) =>
   priority === 'high' ? 'urgent' : priority === 'medium' ? 'pending' : 'active';
 
 export default function ResidentIssuesScreen({ navigation }) {
+  const { colors } = useTheme();
+  const styles = getStyles(colors);
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
 
@@ -349,7 +351,7 @@ export default function ResidentIssuesScreen({ navigation }) {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
   centered: {
     flex: 1, alignItems: 'center', justifyContent: 'center',

@@ -12,7 +12,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
-import { colors } from '../../theme/colors';
+import { useTheme } from '../../context/ThemeContext';
 import { fonts } from '../../theme/typography';
 import ScreenHeader from '../../components/ScreenHeader';
 import SectionHeader from '../../components/SectionHeader';
@@ -22,6 +22,8 @@ const EXPENSE_CATEGORIES = ['maintenance', 'staff', 'utilities', 'repair', 'admi
 const REVENUE_CATEGORIES = ['residential', 'commercial', 'parking'];
 
 export default function FinanceOverviewScreen({ navigation }) {
+  const { colors } = useTheme();
+  const styles = getStyles(colors);
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
 
@@ -173,7 +175,7 @@ export default function FinanceOverviewScreen({ navigation }) {
             {properties.length === 1 ? headerProp.name : `${properties.length} Properties`}
           </Text>
           <View style={styles.locationRow}>
-            <MaterialIcons name="location-on" size={13} color="rgba(255,255,255,0.6)" />
+            <MaterialIcons name="location-on" size={13} color={colors.onPrimaryContainer} style={{ opacity: 0.6 }} />
             <Text style={styles.locationText}>
               {properties.length === 1 ? headerProp.city : properties.map(p => p.city).join(' · ')}
             </Text>
@@ -275,7 +277,7 @@ export default function FinanceOverviewScreen({ navigation }) {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
   centered: {
     flex: 1, alignItems: 'center', justifyContent: 'center',
@@ -290,14 +292,15 @@ const styles = StyleSheet.create({
   propertyName: {
     fontFamily: fonts.manropeBold,
     fontSize: 22,
-    color: colors.onPrimary,
+    color: colors.onPrimaryContainer,
     marginBottom: 4,
   },
   locationRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   locationText: {
     fontFamily: fonts.interRegular,
     fontSize: 13,
-    color: 'rgba(255,255,255,0.65)',
+    color: colors.onPrimaryContainer,
+    opacity: 0.7,
   },
 
   metricsSection: {

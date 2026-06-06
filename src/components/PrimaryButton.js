@@ -8,10 +8,12 @@ import {
 } from 'react-native';
 import PropTypes from 'prop-types';
 import { MaterialIcons } from '@expo/vector-icons';
-import { colors } from '../theme/colors';
+import { useTheme } from '../context/ThemeContext';
 import { fonts } from '../theme/typography';
 
 export default function PrimaryButton({ label, onPress, icon, disabled, loading }) {
+  const { colors } = useTheme();
+  const styles = getStyles(colors);
   return (
     <TouchableOpacity
       style={[styles.button, (disabled || loading) && styles.buttonDisabled]}
@@ -52,7 +54,7 @@ PrimaryButton.defaultProps = {
   loading: false,
 };
 
-const styles = StyleSheet.create({
+const getStyles = (colors) => StyleSheet.create({
   button: {
     backgroundColor: colors.primary,
     borderRadius: 8,

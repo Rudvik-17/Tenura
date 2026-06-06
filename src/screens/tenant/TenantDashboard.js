@@ -17,7 +17,7 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
-import { colors } from '../../theme/colors';
+import { useTheme } from '../../context/ThemeContext';
 import { fonts } from '../../theme/typography';
 import { buildLeaseAgreementHTML } from '../../lib/leaseAgreementHTML';
 import ScreenHeader from '../../components/ScreenHeader';
@@ -26,6 +26,8 @@ import StatusChip from '../../components/StatusChip';
 import PrimaryButton from '../../components/PrimaryButton';
 
 export default function TenantDashboard({ navigation }) {
+  const { colors } = useTheme();
+  const styles = getStyles(colors);
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
 
@@ -248,7 +250,7 @@ export default function TenantDashboard({ navigation }) {
                   : 'NO BALANCE DUE'}
               </Text>
               <TouchableOpacity onPress={handleBalanceInfoPress} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <MaterialIcons name="info-outline" size={14} color="rgba(255,255,255,0.6)" />
+                <MaterialIcons name="info-outline" size={14} color={colors.onPrimaryContainer} style={{ opacity: 0.6 }} />
               </TouchableOpacity>
             </View>
             <Text style={styles.balanceAmount}>
@@ -288,7 +290,7 @@ export default function TenantDashboard({ navigation }) {
                 }}
                 activeOpacity={0.7}
               >
-                <MaterialIcons name="build" size={26} color={colors.primary} />
+                <MaterialIcons name="build" size={26} color={colors.onPrimary} />
               </TouchableOpacity>
               <Text style={styles.quickLinkLabel} numberOfLines={2}>
                 Request{'\n'}Maintenance
@@ -302,7 +304,7 @@ export default function TenantDashboard({ navigation }) {
                 onPress={handleContactPress}
                 activeOpacity={0.7}
               >
-                <MaterialIcons name="smartphone" size={26} color={colors.primary} />
+                <MaterialIcons name="smartphone" size={26} color={colors.onPrimary} />
               </TouchableOpacity>
               <Text style={styles.quickLinkLabel} numberOfLines={2}>
                 Contact Us
@@ -316,7 +318,7 @@ export default function TenantDashboard({ navigation }) {
                 onPress={handleViewDocumentsPress}
                 activeOpacity={0.7}
               >
-                <MaterialIcons name="description" size={26} color={colors.primary} />
+                <MaterialIcons name="description" size={26} color={colors.onPrimary} />
               </TouchableOpacity>
               <Text style={styles.quickLinkLabel} numberOfLines={2}>
                 View{'\n'}Documents
@@ -374,7 +376,7 @@ export default function TenantDashboard({ navigation }) {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
   centered: {
     flex: 1, alignItems: 'center', justifyContent: 'center',
@@ -402,19 +404,21 @@ const styles = StyleSheet.create({
     fontFamily: fonts.interSemiBold,
     fontSize: 11,
     letterSpacing: 1,
-    color: 'rgba(255,255,255,0.6)',
+    color: colors.onPrimaryContainer,
+    opacity: 0.6,
     textTransform: 'uppercase',
   },
   balanceAmount: {
     fontFamily: fonts.manropeBold,
     fontSize: 34,
-    color: colors.onPrimary,
+    color: colors.onPrimaryContainer,
     marginBottom: 2,
   },
   balanceDueText: {
     fontFamily: fonts.interRegular,
     fontSize: 12,
-    color: 'rgba(255,255,255,0.5)',
+    color: colors.onPrimaryContainer,
+    opacity: 0.7,
   },
   makePaymentBtn: {
     backgroundColor: colors.surfaceContainerLowest,
@@ -455,7 +459,7 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: colors.primaryFixed,
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 8,

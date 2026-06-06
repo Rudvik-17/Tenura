@@ -15,13 +15,15 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
-import { colors } from '../../theme/colors';
+import { useTheme } from '../../context/ThemeContext';
 import { fonts } from '../../theme/typography';
 import ScreenHeader from '../../components/ScreenHeader';
 import StatusChip from '../../components/StatusChip';
 import PrimaryButton from '../../components/PrimaryButton';
 
 export default function TenantDetailScreen({ navigation, route }) {
+  const { colors } = useTheme();
+  const styles = getStyles(colors);
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const { tenant: initialTenant } = route.params;
@@ -355,6 +357,8 @@ export default function TenantDetailScreen({ navigation, route }) {
 }
 
 function DetailRow({ icon, label, value, accent, last }) {
+  const { colors } = useTheme();
+  const styles = getStyles(colors);
   return (
     <View style={[styles.detailRow, last && { marginBottom: 0 }]}>
       <MaterialIcons
@@ -370,7 +374,7 @@ function DetailRow({ icon, label, value, accent, last }) {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
   flex: { flex: 1 },
   scroll: { flexGrow: 1 },
@@ -400,13 +404,14 @@ const styles = StyleSheet.create({
   heroName: {
     fontFamily: fonts.manropeBold,
     fontSize: 22,
-    color: colors.onPrimary,
+    color: colors.onPrimaryContainer,
     marginBottom: 4,
   },
   heroEmail: {
     fontFamily: fonts.interRegular,
     fontSize: 13,
-    color: 'rgba(255,255,255,0.65)',
+    color: colors.onPrimaryContainer,
+    opacity: 0.7,
     marginBottom: 12,
   },
   heroChipRow: {

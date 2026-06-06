@@ -19,7 +19,7 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
-import { colors } from '../../theme/colors';
+import { useTheme } from '../../context/ThemeContext';
 import { fonts } from '../../theme/typography';
 import ScreenHeader from '../../components/ScreenHeader';
 import StatusChip from '../../components/StatusChip';
@@ -36,6 +36,8 @@ const statusVariant = (status) =>
   status === 'paid' ? 'active' : status === 'overdue' ? 'urgent' : 'pending';
 
 export default function PaymentHistoryScreen({ navigation }) {
+  const { theme, colors } = useTheme();
+  const styles = getStyles(colors, theme);
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
 
@@ -427,7 +429,12 @@ export default function PaymentHistoryScreen({ navigation }) {
                 }
               }}
             >
-              <Text style={styles.heroPrimaryBtnText}>Make Payment</Text>
+              <Text style={[
+                styles.heroPrimaryBtnText,
+                !pendingPayment && styles.heroPrimaryBtnTextDisabled
+              ]}>
+                Make Payment
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -878,7 +885,7 @@ export default function PaymentHistoryScreen({ navigation }) {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors, theme) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
   centered: {
     flex: 1, alignItems: 'center', justifyContent: 'center',
@@ -911,13 +918,13 @@ const styles = StyleSheet.create({
     fontFamily: fonts.interSemiBold,
     fontSize: 10,
     letterSpacing: 1.5,
-    color: 'rgba(255, 255, 255, 0.65)',
+    color: '#FFFFFF',
     marginBottom: 4,
   },
   heroAmount: {
     fontFamily: fonts.manropeBold,
     fontSize: 30,
-    color: colors.onPrimary,
+    color: '#FFFFFF',
   },
   heroRight: {
     flex: 0.9,
@@ -925,8 +932,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   heroSecondaryBtn: {
-    borderWidth: 1.2,
-    borderColor: 'rgba(255, 255, 255, 0.35)',
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
     paddingVertical: 7,
     paddingHorizontal: 14,
     borderRadius: 8,
@@ -936,10 +943,10 @@ const styles = StyleSheet.create({
   heroSecondaryBtnText: {
     fontFamily: fonts.interSemiBold,
     fontSize: 12,
-    color: colors.onPrimary,
+    color: '#FFFFFF',
   },
   heroPrimaryBtn: {
-    backgroundColor: colors.tertiaryFixedDim,
+    backgroundColor: '#FFFFFF',
     paddingVertical: 7,
     paddingHorizontal: 14,
     borderRadius: 8,
@@ -947,12 +954,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   heroPrimaryBtnDisabled: {
-    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    backgroundColor: theme === 'dark' ? 'rgba(0, 0, 0, 0.25)' : 'rgba(255, 255, 255, 0.35)',
   },
   heroPrimaryBtnText: {
     fontFamily: fonts.interBold,
     fontSize: 12,
-    color: colors.primary,
+    color: theme === 'dark' ? '#0C0B14' : colors.onPrimaryContainer,
+  },
+  heroPrimaryBtnTextDisabled: {
+    color: theme === 'dark' ? 'rgba(255, 255, 255, 0.7)' : 'rgba(63, 15, 2, 0.6)',
   },
 
   // OPTION MENU ITEMS

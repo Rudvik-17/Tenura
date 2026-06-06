@@ -14,7 +14,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
-import { colors } from '../../theme/colors';
+import { useTheme } from '../../context/ThemeContext';
 import { fonts } from '../../theme/typography';
 import ScreenHeader from '../../components/ScreenHeader';
 import MetricCard from '../../components/MetricCard';
@@ -31,6 +31,8 @@ const statusVariant = (status) =>
   status === 'paid' ? 'active' : status === 'overdue' ? 'urgent' : 'pending';
 
 export default function RentCollectionScreen() {
+  const { colors } = useTheme();
+  const styles = getStyles(colors);
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
 
@@ -217,7 +219,7 @@ export default function RentCollectionScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
   centered: {
     flex: 1, alignItems: 'center', justifyContent: 'center',
@@ -270,7 +272,7 @@ const styles = StyleSheet.create({
   avatarInitial: {
     fontFamily: fonts.manropeBold,
     fontSize: 18,
-    color: colors.onPrimary,
+    color: colors.onPrimaryContainer,
   },
   paymentInfo: { flex: 1 },
   tenantName: {

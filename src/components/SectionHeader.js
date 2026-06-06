@@ -1,10 +1,12 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import PropTypes from 'prop-types';
-import { colors } from '../theme/colors';
+import { useTheme } from '../context/ThemeContext';
 import { fonts } from '../theme/typography';
 
 export default function SectionHeader({ title, actionLabel, onAction }) {
+  const { colors } = useTheme();
+  const styles = getStyles(colors);
   return (
     <View style={styles.row}>
       <Text style={styles.title}>{title}</Text>
@@ -28,7 +30,7 @@ SectionHeader.defaultProps = {
   onAction: null,
 };
 
-const styles = StyleSheet.create({
+const getStyles = (colors) => StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',

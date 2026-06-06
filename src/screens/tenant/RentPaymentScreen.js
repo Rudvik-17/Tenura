@@ -14,7 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../../lib/supabase';
 import { showPaymentConfirmed, scheduleRentReminder } from '../../lib/notifications';
 import { useAuth } from '../../context/AuthContext';
-import { colors } from '../../theme/colors';
+import { useTheme } from '../../context/ThemeContext';
 import { fonts } from '../../theme/typography';
 import ScreenHeader from '../../components/ScreenHeader';
 import StatusChip from '../../components/StatusChip';
@@ -40,6 +40,8 @@ function buildUpiUrl(amount) {
 }
 
 export default function RentPaymentScreen({ navigation }) {
+  const { colors } = useTheme();
+  const styles = getStyles(colors);
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
 
@@ -402,7 +404,7 @@ export default function RentPaymentScreen({ navigation }) {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
   centered: {
     flex: 1, alignItems: 'center', justifyContent: 'center',
@@ -417,21 +419,25 @@ const styles = StyleSheet.create({
   amountLabel: {
     fontFamily: fonts.interSemiBold,
     fontSize: 10, letterSpacing: 2,
-    color: 'rgba(255,255,255,0.55)',
+    color: colors.onPrimaryContainer,
+    opacity: 0.6,
     textTransform: 'uppercase', marginBottom: 6,
   },
   amountValue: {
     fontFamily: fonts.manropeBold, fontSize: 42,
-    color: colors.onPrimary, marginBottom: 4,
+    color: colors.onPrimaryContainer, marginBottom: 4,
   },
   amountCurrency: {
     fontFamily: fonts.interRegular, fontSize: 12,
-    color: 'rgba(255,255,255,0.55)', marginBottom: 12,
+    color: colors.onPrimaryContainer,
+    opacity: 0.6,
+    marginBottom: 12,
   },
   dueRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   dueDateText: {
     fontFamily: fonts.interRegular, fontSize: 13,
-    color: 'rgba(255,255,255,0.65)',
+    color: colors.onPrimaryContainer,
+    opacity: 0.7,
   },
 
   methodsSection: { padding: 20 },

@@ -13,12 +13,14 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
-import { colors } from '../../theme/colors';
+import { useTheme } from '../../context/ThemeContext';
 import { fonts } from '../../theme/typography';
 import ScreenHeader from '../../components/ScreenHeader';
 import StatusChip from '../../components/StatusChip';
 
 export default function PropertyDetailScreen({ navigation, route }) {
+  const { colors } = useTheme();
+  const styles = getStyles(colors);
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const { property: initialProperty } = route.params;
@@ -139,7 +141,7 @@ export default function PropertyDetailScreen({ navigation, route }) {
           </View>
           <Text style={styles.heroName}>{property.name}</Text>
           <View style={styles.heroLocationRow}>
-            <MaterialIcons name="location-on" size={13} color="rgba(255,255,255,0.6)" />
+            <MaterialIcons name="location-on" size={13} color={colors.onPrimaryContainer} style={{ opacity: 0.7 }} />
             <Text style={styles.heroLocation}>{property.address}, {property.city}</Text>
           </View>
         </View>
@@ -253,6 +255,8 @@ export default function PropertyDetailScreen({ navigation, route }) {
 }
 
 function StatCell({ label, value, accent }) {
+  const { colors } = useTheme();
+  const styles = getStyles(colors);
   return (
     <View style={styles.statCell}>
       <Text style={[styles.statValue, accent && styles.statValueAccent]}>{value}</Text>
@@ -261,7 +265,7 @@ function StatCell({ label, value, accent }) {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
   centered: {
     flex: 1, alignItems: 'center', justifyContent: 'center',
@@ -287,7 +291,7 @@ const styles = StyleSheet.create({
   heroName: {
     fontFamily: fonts.manropeBold,
     fontSize: 22,
-    color: colors.onPrimary,
+    color: colors.onPrimaryContainer,
     textAlign: 'center',
     marginBottom: 6,
   },
@@ -295,7 +299,8 @@ const styles = StyleSheet.create({
   heroLocation: {
     fontFamily: fonts.interRegular,
     fontSize: 13,
-    color: 'rgba(255,255,255,0.65)',
+    color: colors.onPrimaryContainer,
+    opacity: 0.7,
     textAlign: 'center',
     flexShrink: 1,
   },

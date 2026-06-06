@@ -2,7 +2,7 @@ import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 import { MaterialIcons } from '@expo/vector-icons';
-import { colors } from '../theme/colors';
+import { useTheme } from '../context/ThemeContext';
 import { fonts } from '../theme/typography';
 
 import OwnerDashboard from '../screens/owner/OwnerDashboard';
@@ -93,23 +93,31 @@ function MenuStackNav() {
   );
 }
 
-const TAB_BAR_STYLE = {
-  backgroundColor: colors.primary,
-  borderTopWidth: 0,
-  elevation: 0,
-  height: 64,
-  paddingBottom: 8,
-  paddingTop: 8,
-};
 
 export default function OwnerNavigator() {
+  const { colors } = useTheme();
+
+  const tabBarStyle = {
+    backgroundColor: colors.surface,
+    borderTopWidth: 1,
+    borderTopColor: colors.surfaceContainerHigh,
+    elevation: 8,
+    height: 64,
+    paddingBottom: 8,
+    paddingTop: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+  };
+
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
-        tabBarStyle: TAB_BAR_STYLE,
-        tabBarActiveTintColor: colors.tertiaryFixedDim,
-        tabBarInactiveTintColor: 'rgba(255,255,255,0.45)',
+        tabBarStyle: tabBarStyle,
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.outline,
         tabBarLabelStyle: {
           fontFamily: fonts.interMedium,
           fontSize: 11,
@@ -136,3 +144,4 @@ export default function OwnerNavigator() {
     </Tab.Navigator>
   );
 }
+

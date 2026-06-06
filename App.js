@@ -12,7 +12,9 @@ import {
   Inter_600SemiBold,
 } from '@expo-google-fonts/inter';
 import { AuthProvider } from './src/context/AuthContext';
+import { ThemeProvider } from './src/context/ThemeContext';
 import RootNavigator from './src/navigation/RootNavigator';
+import SplashAnimation from './src/components/SplashAnimation';
 import { requestPermissions } from './src/lib/notifications';
 
 export default function App() {
@@ -27,24 +29,31 @@ export default function App() {
   });
 
   const [fontTimeout, setFontTimeout] = useState(false);
+  const [splashActive, setSplashActive] = useState(true);
 
   useEffect(() => {
     const timer = setTimeout(() => setFontTimeout(true), 3000);
     return () => clearTimeout(timer);
   }, []);
 
-  useEffect(() => { requestPermissions(); }, []);
+  useEffect(() => {
+    requestPermissions();
+  }, []);
 
   // Hold render until fonts are ready or 3s timeout has passed.
-  // If timeout fires first, screens proceed with system fonts (no crash —
-  // unregistered fontFamily strings are silently ignored by React Native).
   if (!fontsLoaded && !fontTimeout) {
     return null;
   }
 
   return (
-    <AuthProvider>
-      <RootNavigator />
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <RootNavigator />
+        {splashActive && (
+          <SplashAnimation onFinish={() => setSplashActive(false)} />
+        )}
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
+

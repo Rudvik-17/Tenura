@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tenura — App Presentation & Showcase</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary: #00E5FF;
+      --primary-dark: #00B5CC;
+      --coral: #FC805C;
+      --bg: #0C0B14;
+      --surface: #131124;
+      --surface-card: #18152B;
+      --text: #F5F3F7;
+      --text-muted: #A5A1B5;
+      --border: #282545;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      overflow-x: hidden;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      padding: 24px 40px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border);
+      background-color: rgba(19, 17, 36, 0.8);
+      backdrop-filter: blur(12px);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .logo {
+      font-family: 'Outfit', sans-serif;
+      font-weight: 800;
+      font-size: 24px;
+      letter-spacing: 2px;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .logo span {
+      color: var(--primary);
+    }
+
+    .tabs {
+      display: flex;
+      background: var(--surface);
+      border-radius: 30px;
+      padding: 4px;
+      border: 1px solid var(--border);
+    }
+
+    .tab-btn {
+      padding: 10px 24px;
+      border: none;
+      background: none;
+      color: var(--text-muted);
+      font-family: 'Outfit', sans-serif;
+      font-weight: 600;
+      font-size: 15px;
+      border-radius: 25px;
+      cursor: pointer;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .tab-btn.active {
+      background: var(--primary);
+      color: #08070D;
+      box-shadow: 0 4px 15px rgba(0, 229, 255, 0.3);
+    }
+
+    .tab-btn.active.dev-tab {
+      background: var(--coral);
+      color: #FFF;
+      box-shadow: 0 4px 15px rgba(252, 128, 92, 0.3);
+    }
+
+    main {
+      flex: 1;
+      display: flex;
+      padding: 40px;
+      gap: 40px;
+      max-width: 1400px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    .presentation-container {
+      flex: 1.2;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      background-color: var(--surface);
+      border-radius: 24px;
+      border: 1px solid var(--border);
+      padding: 40px;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+    }
+
+    .slide-track {
+      position: relative;
+      flex: 1;
+      display: flex;
+      align-items: center;
+    }
+
+    .slide {
+      position: absolute;
+      width: 100%;
+      opacity: 0;
+      transform: translateX(50px);
+      pointer-events: none;
+      transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .slide.active {
+      opacity: 1;
+      transform: translateX(0);
+      pointer-events: auto;
+    }
+
+    .slide-number {
+      font-family: 'Outfit', sans-serif;
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--primary);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    .dev-mode .slide-number {
+      color: var(--coral);
+    }
+
+    .slide-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 38px;
+      font-weight: 700;
+      line-height: 1.2;
+      color: var(--text);
+    }
+
+    .slide-desc {
+      font-size: 16px;
+      line-height: 1.6;
+      color: var(--text-muted);
+    }
+
+    .feature-list {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      margin-top: 10px;
+    }
+
+    .feature-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+    }
+
+    .feature-icon {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: rgba(0, 229, 255, 0.1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--primary);
+      font-weight: bold;
+      font-size: 14px;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+
+    .dev-mode .feature-icon {
+      background: rgba(252, 128, 92, 0.1);
+      color: var(--coral);
+    }
+
+    .feature-text h4 {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 4px;
+      color: var(--text);
+    }
+
+    .feature-text p {
+      font-size: 14px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    .controls {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 40px;
+      padding-top: 24px;
+      border-top: 1px solid var(--border);
+    }
+
+    .nav-btn {
+      padding: 12px 28px;
+      border: 1px solid var(--border);
+      background: var(--surface-card);
+      color: var(--text);
+      font-family: 'Outfit', sans-serif;
+      font-weight: 600;
+      font-size: 15px;
+      border-radius: 30px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .nav-btn:hover:not(:disabled) {
+      border-color: var(--primary);
+      color: var(--primary);
+      transform: translateY(-2px);
+    }
+
+    .dev-mode .nav-btn:hover:not(:disabled) {
+      border-color: var(--coral);
+      color: var(--coral);
+    }
+
+    .nav-btn:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+
+    .dots {
+      display: flex;
+      gap: 8px;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--border);
+      transition: all 0.3s ease;
+      cursor: pointer;
+    }
+
+    .dot.active {
+      background: var(--primary);
+      transform: scale(1.3);
+    }
+
+    .dev-mode .dot.active {
+      background: var(--coral);
+    }
+
+    .preview-container {
+      flex: 0.8;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      background-color: var(--surface-card);
+      border-radius: 24px;
+      border: 1px solid var(--border);
+      padding: 24px;
+      position: relative;
+      overflow: hidden;
+      min-height: 600px;
+    }
+
+    .preview-img {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+      border-radius: 16px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+      transition: all 0.5s ease;
+    }
+
+    .preview-overlay {
+      position: absolute;
+      bottom: 24px;
+      left: 24px;
+      right: 24px;
+      background: rgba(19, 17, 36, 0.85);
+      backdrop-filter: blur(8px);
+      border: 1px solid var(--border);
+      padding: 16px;
+      border-radius: 16px;
+      text-align: center;
+    }
+
+    .preview-overlay h3 {
+      font-family: 'Outfit', sans-serif;
+      font-size: 16px;
+      margin-bottom: 4px;
+      color: var(--text);
+    }
+
+    .preview-overlay p {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    @media (max-width: 992px) {
+      main {
+        flex-direction: column;
+        padding: 20px;
+      }
+      .preview-container {
+        min-height: 400px;
+      }
+      header {
+        padding: 20px;
+        flex-direction: column;
+        gap: 20px;
+      }
+    }
+  </style>
+</head>
+<body class="landlord-mode">
+
+  <header>
+    <div class="logo">
+      TENURA<span>.</span>
+    </div>
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTrack('landlord')">For Landlords</button>
+      <button class="tab-btn dev-tab" onclick="switchTrack('dev')">For Developer</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- Presentation Slides Column -->
+    <div class="presentation-container" id="presentation">
+      
+      <!-- Slide Track -->
+      <div class="slide-track" id="slideTrack">
+        <!-- Slides will be dynamically inserted here by JS -->
+      </div>
+
+      <!-- Controls -->
+      <div class="controls">
+        <button class="nav-btn" id="prevBtn" onclick="prevSlide()" disabled>
+          &larr; Previous
+        </button>
+        <div class="dots" id="dotsContainer">
+          <!-- Dots will be dynamically inserted here -->
+        </div>
+        <button class="nav-btn" id="nextBtn" onclick="nextSlide()">
+          Next &rarr;
+        </button>
+      </div>
+
+    </div>
+
+    <!-- Graphical Preview Column -->
+    <div class="preview-container">
+      <img src="tenura_app_mockup.png" alt="Tenura UI Mockup" class="preview-img" id="previewImg">
+      <div class="preview-overlay">
+        <h3 id="previewTitle">Tenura Interface Preview</h3>
+        <p id="previewSub">Mockup demonstrating our landlord dark mode and tenant UPI portal</p>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const landlordSlides = [
+      {
+        number: "Slide 1 of 7",
+        title: "Tenura: Property Management Made Simple",
+        desc: "A premium mobile portal built to handle rent collection, legal agreements, and repairs—giving you complete transparency and keeping your weekends free.",
+        features: [
+          { title: "Peace of Mind", desc: "No back-and-forth WhatsApp arguments or awkward payment reminder calls." },
+          { title: "Local Presence", desc: "We act as your digital and local property manager in India." }
+        ]
+      },
+      {
+        number: "Slide 2 of 7",
+        title: "The Landlord's Headache",
+        desc: "Renting out properties locally involves constant manual chores and stress. We tackle the four major pain points:",
+        features: [
+          { title: "Chasing Payments", desc: "Sending reminders and checking bank deposits is tedious." },
+          { title: "Maintenance Coordination", desc: "Finding plumbers, carpenters, or painters and visiting the site." },
+          { title: "Transparency", desc: "Not having digital receipts, records, or repair photo proofs." }
+        ]
+      },
+      {
+        number: "Slide 3 of 7",
+        title: "Introducing Tenura",
+        desc: "Our app connects landlords, tenants, and verified workers into one unified system. Everything is documented, tracked, and visible.",
+        features: [
+          { title: "Automated UPI Rent", desc: "Tenants pay via their favorite apps (GPay, PhonePe, Paytm)." },
+          { title: "Verified Services", desc: "Maintenance tickets are raised and resolved on-demand." },
+          { title: "Owner Ledger", desc: "Track earnings, deposits, and repair expenses in real-time." }
+        ]
+      },
+      {
+        number: "Slide 4 of 7",
+        title: "Seamless UPI Rent Collection",
+        desc: "Rent collection should happen automatically without calls. Tenura makes it frictionless:",
+        features: [
+          { title: "Polite Reminders", desc: "The app notifies tenants automatically as the due date approaches." },
+          { title: "Direct to Bank", desc: "Funds go straight from the tenant's UPI wallet to your bank account." },
+          { title: "Instant Receipts", desc: "System generates PDF payment receipts for your tax records." }
+        ]
+      },
+      {
+        number: "Slide 5 of 7",
+        title: "One-Tap Maintenance Approvals",
+        desc: "You will never have to search for repair workers or coordinate timings again:",
+        features: [
+          { title: "Photo Tickets", desc: "Tenant uploads photos of the issue directly inside the app." },
+          { title: "Verified Vendors", desc: "We send a trusted technician to inspect the problem." },
+          { title: "Tap to Approve", desc: "We upload the quote. You tap 'Approve' to pay, and the job gets done." }
+        ]
+      },
+      {
+        number: "Slide 6 of 7",
+        title: "Legal Safety & Tenant Screening",
+        desc: "Protecting your asset and ensuring compliance is our priority:",
+        features: [
+          { title: "Digital Agreement", desc: "Automatic creation and storage of legal rent agreements." },
+          { title: "Police Verification", desc: "We execute mandatory tenant background checks locally." },
+          { title: "Secure Vault", desc: "Aadhaar, PAN, and leases are encrypted and stored safely." }
+        ]
+      },
+      {
+        number: "Slide 7 of 7",
+        title: "Our Services & Performance Pricing",
+        desc: "We align our goals directly with yours—we only succeed when your rental succeeds:",
+        features: [
+          { title: "Performance-Based", desc: "Monthly management fee of 8% to 10% on rent actually collected." },
+          { title: "Zero Collection = Zero Fee", desc: "If the unit is vacant, you do not pay us a single rupee." },
+          { title: "Tenant Finding", desc: "One-time placement fee of 1 month's rent when sourcing a new tenant." }
+        ]
+      }
+    ];
+
+    const devSlides = [
+      {
+        number: "Slide 1 of 5",
+        title: "Tech Stack & Architecture",
+        desc: "Tenura is built on a modern, decoupled stack allowing rapid native deployment on iOS and Android:",
+        features: [
+          { title: "Cross-Platform UI", desc: "React Native with Expo 54 client providing native components." },
+          { title: "Backend-as-a-Service", desc: "Supabase client handling PostgreSQL tables, Auth, and Storage." },
+          { title: "Dynamic Themes", desc: "Centralized ThemeContext.js providing smooth dark/light mode." }
+        ]
+      },
+      {
+        number: "Slide 2 of 5",
+        title: "Database Versioning & Migration",
+        desc: "We manage the schema cleanly using Supabase SQL editor scripts:",
+        features: [
+          { title: "11 Migrations", desc: " Evolution of schema from base tables to community alerts and details." },
+          { title: "Robust Seeding", desc: "A comprehensive seed script populates 4 tenants, 2 properties, and ledgers in one run." }
+        ]
+      },
+      {
+        number: "Slide 3 of 5",
+        title: "Production-Ready Security (RLS)",
+        desc: "Tenura uses Row-Level Security (RLS) to ensure absolute sandboxing of client data:",
+        features: [
+          { title: "Sandboxed Queries", desc: "Owners only query their properties; tenants only see their own leases." },
+          { title: "Join-Based Constraints", desc: "Payments query filters through tenant relationships to avoid exposed owner keys." },
+          { title: "Auto-Linking Trigger", desc: "Auth registrations checks email against tenants table for automatic link." }
+        ]
+      },
+      {
+        number: "Slide 4 of 5",
+        title: "Realtime Sync & PDF Engine",
+        desc: "Handling communications and exports directly on the client side:",
+        features: [
+          { title: "Supabase Channels", desc: "Realtime WebSocket subscriptions on the messages table for instant ticket chat." },
+          { title: "Expo Print & Share", desc: "Client-side PDF compiler rendering local receipts and contracts immediately." }
+        ]
+      },
+      {
+        number: "Slide 5 of 5",
+        title: "Roadmap: Developer Collaboration",
+        desc: "The app is 80% complete. Here are the final features needed for production launching:",
+        features: [
+          { title: "Razorpay SDK Integration", desc: "Setup payment client UI to trigger active SDK checkouts and webhooks." },
+          { title: "Expo Push Notifications", desc: "Wire in Expo notifications client and store push token keys on user login." }
+        ]
+      }
+    ];
+
+    let currentTrack = 'landlord';
+    let currentSlideIndex = 0;
+
+    function getSlidesData() {
+      return currentTrack === 'landlord' ? landlordSlides : devSlides;
+    }
+
+    function renderSlides() {
+      const slides = getSlidesData();
+      const track = document.getElementById('slideTrack');
+      const dotsContainer = document.getElementById('dotsContainer');
+      
+      track.innerHTML = '';
+      dotsContainer.innerHTML = '';
+
+      slides.forEach((slide, idx) => {
+        // Render Slide
+        const slideEl = document.createElement('div');
+        slideEl.className = `slide ${idx === currentSlideIndex ? 'active' : ''}`;
+        
+        let featuresHtml = '';
+        if (slide.features) {
+          featuresHtml = `
+            <div class="feature-list">
+              ${slide.features.map((f, fIdx) => `
+                <div class="feature-item">
+                  <div class="feature-icon">${fIdx + 1}</div>
+                  <div class="feature-text">
+                    <h4>${f.title}</h4>
+                    <p>${f.desc}</p>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          `;
+        }
+
+        slideEl.innerHTML = `
+          <div class="slide-number">${slide.number}</div>
+          <h2 class="slide-title">${slide.title}</h2>
+          <p class="slide-desc">${slide.desc}</p>
+          ${featuresHtml}
+        `;
+        track.appendChild(slideEl);
+
+        // Render Dot
+        const dot = document.createElement('div');
+        dot.className = `dot ${idx === currentSlideIndex ? 'active' : ''}`;
+        dot.onclick = () => goToSlide(idx);
+        dotsContainer.appendChild(dot);
+      });
+
+      // Update button disabled states
+      document.getElementById('prevBtn').disabled = currentSlideIndex === 0;
+      document.getElementById('nextBtn').disabled = currentSlideIndex === slides.length - 1;
+    }
+
+    function switchTrack(track) {
+      currentTrack = track;
+      currentSlideIndex = 0;
+      
+      const body = document.body;
+      const container = document.getElementById('presentation');
+      const previewTitle = document.getElementById('previewTitle');
+      const previewSub = document.getElementById('previewSub');
+
+      if (track === 'dev') {
+        body.classList.remove('landlord-mode');
+        body.classList.add('dev-mode');
+        container.classList.add('dev-mode');
+        document.querySelectorAll('.tab-btn')[0].classList.remove('active');
+        document.querySelectorAll('.tab-btn')[1].classList.add('active');
+        
+        previewTitle.innerText = "Developer System Architecture";
+        previewSub.innerText = "React Native + Expo 54 with Supabase DB Migrations";
+      } else {
+        body.classList.remove('dev-mode');
+        body.classList.add('landlord-mode');
+        container.classList.remove('dev-mode');
+        document.querySelectorAll('.tab-btn')[1].classList.remove('active');
+        document.querySelectorAll('.tab-btn')[0].classList.add('active');
+
+        previewTitle.innerText = "Tenura Interface Preview";
+        previewSub.innerText = "Mockup demonstrating our landlord dark mode and tenant UPI portal";
+      }
+
+      renderSlides();
+    }
+
+    function nextSlide() {
+      const slides = getSlidesData();
+      if (currentSlideIndex < slides.length - 1) {
+        currentSlideIndex++;
+        renderSlides();
+      }
+    }
+
+    function prevSlide() {
+      if (currentSlideIndex > 0) {
+        currentSlideIndex--;
+        renderSlides();
+      }
+    }
+
+    function goToSlide(idx) {
+      currentSlideIndex = idx;
+      renderSlides();
+    }
+
+    // Initial load
+    renderSlides();
+  </script>
+</body>
+</html>

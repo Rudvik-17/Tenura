@@ -1,8 +1,12 @@
 # 🏛️ Tenura
 
 <p align="center">
-  <b>Precision-crafted property management.</b><br>
-  A modern, double-sided mobile application built for landlords and tenants.
+  <b>Precision-crafted property management for modern landlords and tenants.</b><br>
+  A high-fidelity, double-sided mobile application built to put rent collection and maintenance on autopilot.
+</p>
+
+<p align="center">
+  <img src="./tenura_app_mockup.png" alt="Tenura Mobile Mockup" width="600" style="border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);" />
 </p>
 
 <p align="center">
@@ -16,10 +20,13 @@
 
 ## 💎 Design System & Philosophy
 
-Tenura is built on **"The Precision Atelier"** design system — featuring sleek typography, custom spacing tokens, subtle gradients, and dark-mode elegance. The application offers a streamlined, zero-friction interface tailored for fast operations.
+Tenura is designed with a premium, dual-aesthetic color system:
+* **Landlord Mode**: A sleek, high-contrast dark space violet theme with glowing neon cyan accents.
+* **Tenant Mode**: A warm, clean light cream theme with soft coral highlights.
 
-### 🎭 Two Roles, One Codebase
-The application dynamically routes the user to either the **Owner** or **Tenant** interface based on their authenticated role in Supabase. Complete data isolation is maintained via **Row Level Security (RLS)**.
+### 🎭 Double-Sided Navigational Flow
+
+Based on the authenticated user's role stored in Supabase, the application dynamically gates navigation:
 
 ```mermaid
 graph TD
@@ -51,74 +58,64 @@ graph TD
 
 ## ⚡ Features Matrix
 
-| Feature | Owner Experience | Tenant Experience |
+| Feature | Landlord Portal (Owner) | Tenant Portal |
 | :--- | :--- | :--- |
-| **Dashboard** | 📊 Portfolio metrics, Occupancy, MTD Collections | 🏠 Current Rent status, Due dates, Landlord profile |
-| **Finance** | 💰 Full rent ledger, Transaction history log | 💳 Instant UPI payment (Google Pay, PhonePe, Paytm) |
-| **Maintenance** | 🔧 Priority-level request tracker | 🛠️ Issue submission & progress tracking |
-| **Communication** | 💬 Real-time chat per issue with tenant | 💬 Real-time chat per issue with landlord |
-| **Documents** | 📄 Onboard tenants, define lease duration | 📄 Instant view & share of lease PDF |
+| **Dashboard** | 📊 Portfolio metrics, Occupancy, Rent Due, Financial Overview | 🏠 Current rent status, Due dates, Landlord profile |
+| **Rent Collection** | 💰 Rent collection logs, Transaction logs, Ledger | 💳 Instant UPI payment options (Google Pay, PhonePe, Paytm) |
+| **Maintenance** | 🔧 Priority-based request tracker, verified vendors | 🛠️ Multi-step photo ticket submission & tracking |
+| **Realtime Chat** | 💬 WebSockets chat directly linked to repair ticket | 💬 WebSockets chat directly linked to repair ticket |
+| **Document Vault** | 📄 Onboard tenants, define lease duration, secure storage | 📄 View lease details and generate PDF receipts on-device |
 
 ---
 
-## 🛠️ Tech Stack & Architecture
+## 🛠&nbsp; Tech Stack & Architecture
 
 * **Frontend Framework:** React Native with Expo (SDK 54)
-* **Navigation Architecture:** React Navigation 7 (Unified Native Stack & Bottom Tab bars)
-* **Backend Database:** Supabase (Postgres, Row Level Security, Real-time WebSockets)
-* **PDF Engine:** `expo-print` & `expo-sharing` (generates legal lease documents and digital receipts on the fly)
+* **Navigation Architecture:** React Navigation 7 (Native Stacks + Bottom Tab bars)
+* **Backend Database:** Supabase (Postgres Database, Storage, and Real-time channels)
+* **PDF Compilation:** client-side HTML to PDF generation using `expo-print` and native sharing with `expo-sharing`
 
 ### 📂 Directory Structure
 
 ```
 Tenura/
 ├── src/
-│   ├── context/    – Auth state & active user role context
-│   ├── navigation/ – Stack + Bottom Tab navigators for each role flow
-│   ├── screens/    – Auth, Owner, Tenant, and Shared screens
-│   ├── components/ – Atoms & Molecules (MetricCard, CustomButtons, Header)
-│   ├── lib/        – Supabase clients & receipt/lease PDF engines
-│   └── theme/      – Typography, spacing, and brand color design tokens
+│   ├── context/    – Auth state, role context, and email auto-link
+│   ├── navigation/ – Stack + Bottom Tab navigation flows per role
+│   ├── screens/    – Auth screens, owner portals, and tenant portals
+│   ├── components/ – Atoms & Molecules (MetricCard, buttons, ScreenHeader)
+│   ├── lib/        – Supabase client setup & PDF receipt compiler
+│   └── theme/      – Spacing, typography, and light/dark color palettes
 └── supabase/
-    ├── migrations/ – Table schemas, database indexes, and RLS policies
-    └── seed/       – Production-grade demo data for immediate testing
+    ├── migrations/ – Table schemas, RLS security policies, and SQL scripts
+    └── seed/       – Production-grade seed data for local testing
 ```
 
 ---
 
-## 🚀 Running Locally
+## 🚀 Getting Started & Demo Setup
 
-Follow these quick steps to launch the local Expo development server:
-
-<details>
-<summary><b>1. Install Dependencies</b> (Click to expand)</summary>
-
-```bash
-npm install
-```
-</details>
-
-<details>
-<summary><b>2. Start Metro Bundler</b> (Click to expand)</summary>
-
-```bash
-# Start standard Expo server
-npm start
-
-# Or target specific platforms directly
-npm run ios        # For iOS simulator
-npm run android    # For Android emulator
-```
-</details>
+For a complete guide to configuring Supabase, setting up test tenant accounts, and running the walkthrough script, please refer to:
+* 📄 **[DEMO_SETUP_GUIDE.md](./DEMO_SETUP_GUIDE.md)** — Step-by-step Supabase database configuration & seeding.
+* 🎬 **[DEMO_SCRIPT.md](./DEMO_SCRIPT.md)** — Slide-by-slide and talk-track walkthrough for presenting the app.
 
 ---
 
-## 🔒 Database & Security Policies
+## 🔒 Security & Row Level Security (RLS)
 
-Tenura enforces strict **Row Level Security (RLS)** at the PostgreSQL layer. Data queries cannot bypass validation:
+Tenura enforces strict **Row Level Security (RLS)** at the database layer. No queries can access or bypass owner-tenant bounds:
+* **Properties & Leases:** Secured by authenticated Owner and Tenant IDs.
+* **Auto-Link Onboarding:** When a tenant registers, a database query checks their email against the pre-seeded tenant table and automatically links their Auth profile to their lease details instantly.
+* **Communications:** Chat messages can only be retrieved by the corresponding lease owner and tenant.
 
-* **Properties:** Managed solely by the authenticated Owner.
-* **Tenants:** Linked to properties, mapped to Auth users for self-claiming onboarding.
-* **Leases:** Access is double-gated by Owner and Tenant IDs.
-* **Payments & Ledger:** Only readable/writable by users belonging to the corresponding lease.
-* **Issue Messages:** Structured chat messages linked directly to a maintenance ticket. Uses PostgreSQL real-time listeners for instant updates.
+---
+
+## 📅 Roadmap & Next Phases
+
+- [x] High-Contrast UI Contrast fixes for Light and Dark Modes
+- [x] Smooth Linear Progress Bar Animation on Login
+- [x] On-Device PDF Receipt Generation & Native Sharing
+- [x] Real-time messaging for maintenance tickets
+- [ ] **Razorpay SDK Integration** for live UPI/Card processing
+- [ ] **Expo Push Notifications** for rent reminders and chat notifications
+

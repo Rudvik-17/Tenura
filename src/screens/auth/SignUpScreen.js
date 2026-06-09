@@ -250,13 +250,13 @@ const getStyles = (colors) => StyleSheet.create({
     fontFamily: fonts.manropeBold,
     fontSize: 22,
     letterSpacing: 4,
-    color: colors.onPrimary,
+    color: '#FFFFFF',
     marginBottom: 6,
   },
   tagline: {
     fontFamily: fonts.interRegular,
     fontSize: 13,
-    color: 'rgba(255,255,255,0.6)',
+    color: 'rgba(255,255,255,0.85)',
     letterSpacing: 0.5,
   },
   heroDivider: {

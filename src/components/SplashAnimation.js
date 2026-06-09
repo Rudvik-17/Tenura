@@ -126,7 +126,7 @@ export default function SplashAnimation({ onFinish }) {
             },
           ]}
         >
-          <Text style={styles.titleText}>EstateLogic</Text>
+          <Text style={styles.titleText}>TENURA</Text>
           <Text style={styles.subtitleText}>PREMIUM LIVING SOLUTIONS</Text>
         </Animated.View>
       </View>

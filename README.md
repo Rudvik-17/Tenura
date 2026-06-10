@@ -5,9 +5,7 @@
   A high-fidelity, double-sided mobile application built to put rent collection and maintenance on autopilot.
 </p>
 
-<p align="center">
-  <img src="./tenura_app_mockup.png" alt="Tenura Mobile Mockup" width="600" style="border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);" />
-</p>
+
 
 <p align="center">
   <img src="https://img.shields.io/badge/React%20Native-0.81-61DAFB?logo=react&logoColor=black&style=for-the-badge" alt="React Native">

@@ -19,13 +19,25 @@ import { fonts } from '../../theme/typography';
 import ScreenHeader from '../../components/ScreenHeader';
 import PrimaryButton from '../../components/PrimaryButton';
 
-const CITIES = ['Bangalore', 'Mumbai', 'Delhi', 'Chennai', 'Hyderabad', 'Pune', 'Kolkata'];
+const CITIES = [
+  'Agra', 'Ahmedabad', 'Agartala', 'Ajmer', 'Aligarh', 'Alwar', 'Allahabad (Prayagraj)', 'Amritsar',
+  'Aurangabad', 'Bangalore (Bengaluru)', 'Bareilly', 'Bathinda', 'Belgaum', 'Bhopal', 'Bhubaneswar',
+  'Bikaner', 'Bilaspur', 'Chandigarh', 'Chennai', 'Coimbatore', 'Cuttack', 'Dehradun', 'Delhi',
+  'Dhanbad', 'Dharamshala', 'Firozabad', 'Ghaziabad', 'Gorakhpur', 'Gulbarga', 'Guntur', 'Gurgaon (Gurugram)',
+  'Guwahati', 'Gwalior', 'Haldwani', 'Haridwar', 'Hubli-Dharwad', 'Hyderabad', 'Imphal', 'Indore',
+  'Jabalpur', 'Jaipur', 'Jalandhar', 'Jammu', 'Jamshedpur', 'Jhansi', 'Jodhpur', 'Kakinada',
+  'Kanpur', 'Kochi (Cochin)', 'Kohima', 'Kolkata', 'Kota', 'Kozhikode', 'Kurnool', 'Lucknow',
+  'Ludhiana', 'Madurai', 'Mangalore (Mangaluru)', 'Meerut', 'Moradabad', 'Mumbai', 'Muzaffarnagar',
+  'Mysore (Mysuru)', 'Nagpur', 'Nashik', 'Navi Mumbai', 'Nellore', 'Noida', 'Patiala', 'Patna',
+  'Pondicherry', 'Pune', 'Raipur', 'Rajkot', 'Ranchi', 'Roorkee', 'Rourkela', 'Saharanpur',
+  'Salem', 'Shillong', 'Shimla', 'Siliguri', 'Solapur', 'Srinagar', 'Surat', 'Thane',
+  'Thiruvananthapuram', 'Tiruchirappalli', 'Tirupati', 'Tiruppur', 'Udaipur', 'Vadodara',
+  'Varanasi', 'Vellore', 'Vijayawada', 'Visakhapatnam', 'Warangal'
+];
 const TOTAL_STEPS = 3;
 
 const PROPERTY_TYPES = [
   { key: 'apartment', label: 'Apartment', icon: 'apartment' },
-  { key: 'house',     label: 'House',     icon: 'house' },
-  { key: 'villa',     label: 'Villa',     icon: 'home' },
   { key: 'commercial', label: 'Commercial', icon: 'business' },
 ];
 
@@ -49,6 +61,12 @@ export default function AddPropertyScreen({ navigation }) {
   // Step 2
   const [totalUnits, setTotalUnits] = useState('');
   const [avgRent, setAvgRent] = useState('');
+  const [commArea, setCommArea] = useState('');
+  const [commRate, setCommRate] = useState('');
+  const [commParkName, setCommParkName] = useState('');
+  const [commBuildingName, setCommBuildingName] = useState('');
+  const [commPrefix, setCommPrefix] = useState('Office');
+  const [commStartNum, setCommStartNum] = useState('101');
 
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
@@ -64,7 +82,12 @@ export default function AddPropertyScreen({ navigation }) {
 
   const validateStep1 = () => {
     const errs = {};
-    if (!name.trim()) errs.name = 'Property name is required.';
+    if (propertyType === 'commercial') {
+      if (!commParkName.trim()) errs.commParkName = 'Commercial complex / park name is required.';
+      if (!commBuildingName.trim()) errs.commBuildingName = 'Building / tower name is required.';
+    } else {
+      if (!name.trim()) errs.name = 'Property name is required.';
+    }
     if (!address.trim()) errs.address = 'Address is required.';
     if (!city.trim()) errs.city = 'City is required.';
     setErrors(errs);
@@ -74,16 +97,40 @@ export default function AddPropertyScreen({ navigation }) {
   const validateStep2 = () => {
     const errs = {};
     const units = Number(totalUnits);
-    const rent = Number(avgRent);
     if (!totalUnits.trim()) {
-      errs.totalUnits = 'Total units is required.';
+      errs.totalUnits = propertyType === 'commercial' ? 'Total offices/shops is required.' : 'Total units is required.';
     } else if (!Number.isInteger(units) || units <= 0) {
-      errs.totalUnits = 'Enter a valid number of units.';
+      errs.totalUnits = propertyType === 'commercial' ? 'Enter a valid number of offices/shops.' : 'Enter a valid number of units.';
     }
-    if (!avgRent.trim()) {
-      errs.avgRent = 'Average rent is required.';
-    } else if (isNaN(rent) || rent <= 0) {
-      errs.avgRent = 'Enter a valid rent amount.';
+
+    if (propertyType === 'commercial') {
+      const area = Number(commArea);
+      const rate = Number(commRate);
+      if (!commArea.trim()) {
+        errs.commArea = 'Office area is required.';
+      } else if (isNaN(area) || area <= 0) {
+        errs.commArea = 'Enter a valid area (sq. ft.).';
+      }
+      if (!commRate.trim()) {
+        errs.commRate = 'Rent per sq. ft. is required.';
+      } else if (isNaN(rate) || rate <= 0) {
+        errs.commRate = 'Enter a valid rent rate.';
+      }
+      if (commStartNum.trim()) {
+        const start = Number(commStartNum);
+        if (!Number.isInteger(start) || start <= 0) {
+          errs.commStartNum = 'Enter a valid starting number.';
+        }
+      } else {
+        errs.commStartNum = 'Starting number is required.';
+      }
+    } else {
+      const rent = Number(avgRent);
+      if (!avgRent.trim()) {
+        errs.avgRent = 'Average rent is required.';
+      } else if (isNaN(rent) || rent <= 0) {
+        errs.avgRent = 'Enter a valid rent amount.';
+      }
     }
     setErrors(errs);
     return Object.keys(errs).length === 0;
@@ -108,15 +155,19 @@ export default function AddPropertyScreen({ navigation }) {
     setSubmitError(null);
     setLoading(true);
 
+    const finalName = propertyType === 'commercial'
+      ? `${commParkName.trim()} - ${commBuildingName.trim()}`
+      : name.trim();
+
     const { data: inserted, error: insertError } = await supabase
       .from('properties')
       .insert({
         owner_id: user.id,
-        name: name.trim(),
+        name: finalName,
         address: address.trim(),
         city: city.trim(),
         total_units: Number(totalUnits),
-        avg_rent: Number(avgRent),
+        avg_rent: propertyType === 'commercial' ? Number(commArea) * Number(commRate) : Number(avgRent),
         property_type: propertyType,
       })
       .select('id')
@@ -130,16 +181,26 @@ export default function AddPropertyScreen({ navigation }) {
 
     // Batch-insert unit rows (best-effort — non-blocking if units table isn't migrated yet)
     const count = Math.min(Number(totalUnits), 500);
-    const unitRows = Array.from({ length: count }, (_, i) => ({
-      property_id: inserted.id,
-      unit_number: String(101 + i),
-    }));
+    const unitRows = Array.from({ length: count }, (_, i) => {
+      let unitNum = '';
+      if (propertyType === 'commercial') {
+        const prefix = commPrefix.trim() ? `${commPrefix.trim()} ` : '';
+        const start = Number(commStartNum) || 101;
+        unitNum = `${prefix}${start + i}`;
+      } else {
+        unitNum = String(101 + i);
+      }
+      return {
+        property_id: inserted.id,
+        unit_number: unitNum,
+      };
+    });
     await supabase.from('units').insert(unitRows);
 
     setLoading(false);
     Alert.alert(
       'Property Added',
-      `${name.trim()} has been added to your portfolio with ${count} unit${count > 1 ? 's' : ''}.`,
+      `${finalName} has been added to your portfolio with ${count} unit${count > 1 ? 's' : ''}.`,
       [{ text: 'Done', onPress: () => navigation.goBack() }],
     );
   };
@@ -191,24 +252,54 @@ export default function AddPropertyScreen({ navigation }) {
         ))}
       </View>
 
-      <Text style={[styles.fieldLabel, { marginTop: 20 }]}>PROPERTY NAME</Text>
-      <TextInput
-        style={[styles.input, errors.name && styles.inputError]}
-        value={name}
-        onChangeText={t => { setName(t); setErrors(e => ({ ...e, name: null })); }}
-        placeholder="e.g. The Sterling Heights"
-        placeholderTextColor={colors.outline}
-        autoCapitalize="words"
-        autoCorrect={false}
-      />
-      {errors.name ? <Text style={styles.fieldError}>{errors.name}</Text> : null}
+      {propertyType === 'commercial' ? (
+        <>
+          <Text style={[styles.fieldLabel, { marginTop: 20 }]}>COMMERCIAL COMPLEX / TECH PARK</Text>
+          <TextInput
+            style={[styles.input, errors.commParkName && styles.inputError]}
+            value={commParkName}
+            onChangeText={t => { setCommParkName(t); setErrors(e => ({ ...e, commParkName: null })); }}
+            placeholder="e.g. Prestige Tech Park"
+            placeholderTextColor={colors.outline}
+            autoCapitalize="words"
+            autoCorrect={false}
+          />
+          {errors.commParkName ? <Text style={styles.fieldError}>{errors.commParkName}</Text> : null}
+
+          <Text style={[styles.fieldLabel, { marginTop: 16 }]}>BUILDING / TOWER NAME</Text>
+          <TextInput
+            style={[styles.input, errors.commBuildingName && styles.inputError]}
+            value={commBuildingName}
+            onChangeText={t => { setCommBuildingName(t); setErrors(e => ({ ...e, commBuildingName: null })); }}
+            placeholder="e.g. Jupiter Block"
+            placeholderTextColor={colors.outline}
+            autoCapitalize="words"
+            autoCorrect={false}
+          />
+          {errors.commBuildingName ? <Text style={styles.fieldError}>{errors.commBuildingName}</Text> : null}
+        </>
+      ) : (
+        <>
+          <Text style={[styles.fieldLabel, { marginTop: 20 }]}>PROPERTY NAME</Text>
+          <TextInput
+            style={[styles.input, errors.name && styles.inputError]}
+            value={name}
+            onChangeText={t => { setName(t); setErrors(e => ({ ...e, name: null })); }}
+            placeholder="e.g. Prestige Shantiniketan"
+            placeholderTextColor={colors.outline}
+            autoCapitalize="words"
+            autoCorrect={false}
+          />
+          {errors.name ? <Text style={styles.fieldError}>{errors.name}</Text> : null}
+        </>
+      )}
 
       <Text style={[styles.fieldLabel, { marginTop: 16 }]}>ADDRESS</Text>
       <TextInput
         style={[styles.input, styles.multilineInput, errors.address && styles.inputError]}
         value={address}
         onChangeText={t => { setAddress(t); setErrors(e => ({ ...e, address: null })); }}
-        placeholder="Street, locality"
+        placeholder={propertyType === 'commercial' ? "e.g. Unit 3A, 4th Floor, Phase 2, DLF CyberCity" : "e.g. Flat 502, Tower 3, Prestige Shantiniketan, Whitefield"}
         placeholderTextColor={colors.outline}
         autoCapitalize="sentences"
         multiline
@@ -254,43 +345,138 @@ export default function AddPropertyScreen({ navigation }) {
 
   // ── Step 2: Unit Configuration ───────────────────────────────────────────────
 
-  const renderStep2 = () => (
-    <View>
-      <Text style={styles.stepTitle}>Unit Configuration</Text>
-      <Text style={styles.stepSubtitle}>Set up the unit and rent details</Text>
+  const renderStep2 = () => {
+    if (propertyType === 'commercial') {
+      const areaVal = Number(commArea);
+      const rateVal = Number(commRate);
+      const estimatedRent = !isNaN(areaVal) && !isNaN(rateVal) && areaVal > 0 && rateVal > 0 ? areaVal * rateVal : 0;
 
-      <Text style={styles.fieldLabel}>TOTAL UNITS</Text>
-      <TextInput
-        style={[styles.input, errors.totalUnits && styles.inputError]}
-        value={totalUnits}
-        onChangeText={t => { setTotalUnits(t); setErrors(e => ({ ...e, totalUnits: null })); }}
-        placeholder="e.g. 120"
-        placeholderTextColor={colors.outline}
-        keyboardType="number-pad"
-      />
-      {errors.totalUnits ? <Text style={styles.fieldError}>{errors.totalUnits}</Text> : null}
+      return (
+        <View>
+          <Text style={styles.stepTitle}>Commercial Configuration</Text>
+          <Text style={styles.stepSubtitle}>Set up the office/shop area and rent details</Text>
 
-      <Text style={[styles.fieldLabel, { marginTop: 16 }]}>AVERAGE RENT PER UNIT</Text>
-      <View style={styles.prefixRow}>
-        <View style={styles.prefixBox}>
-          <Text style={styles.prefixText}>₹</Text>
+          <Text style={styles.fieldLabel}>TOTAL OFFICES / SHOPS</Text>
+          <TextInput
+            style={[styles.input, errors.totalUnits && styles.inputError]}
+            value={totalUnits}
+            onChangeText={t => { setTotalUnits(t); setErrors(e => ({ ...e, totalUnits: null })); }}
+            placeholder="e.g. 15"
+            placeholderTextColor={colors.outline}
+            keyboardType="number-pad"
+          />
+          {errors.totalUnits ? <Text style={styles.fieldError}>{errors.totalUnits}</Text> : null}
+
+          <Text style={[styles.fieldLabel, { marginTop: 16 }]}>AVERAGE OFFICE AREA (SQ. FT.)</Text>
+          <TextInput
+            style={[styles.input, errors.commArea && styles.inputError]}
+            value={commArea}
+            onChangeText={t => { setCommArea(t); setErrors(e => ({ ...e, commArea: null })); }}
+            placeholder="e.g. 1500"
+            placeholderTextColor={colors.outline}
+            keyboardType="number-pad"
+          />
+          {errors.commArea ? <Text style={styles.fieldError}>{errors.commArea}</Text> : null}
+
+          <Text style={[styles.fieldLabel, { marginTop: 16 }]}>RENT PER SQ. FT. (MONTHLY)</Text>
+          <View style={styles.prefixRow}>
+            <View style={styles.prefixBox}>
+              <Text style={styles.prefixText}>₹</Text>
+            </View>
+            <TextInput
+              style={[styles.input, styles.prefixInput, errors.commRate && styles.inputError]}
+              value={commRate}
+              onChangeText={t => { setCommRate(t); setErrors(e => ({ ...e, commRate: null })); }}
+              placeholder="e.g. 75"
+              placeholderTextColor={colors.outline}
+              keyboardType="number-pad"
+            />
+          </View>
+          {errors.commRate ? <Text style={styles.fieldError}>{errors.commRate}</Text> : null}
+
+          <View style={styles.sideBySideRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.fieldLabel}>OFFICE NO. PREFIX</Text>
+              <TextInput
+                style={styles.input}
+                value={commPrefix}
+                onChangeText={setCommPrefix}
+                placeholder="e.g. Office, Shop"
+                placeholderTextColor={colors.outline}
+                autoCapitalize="words"
+                autoCorrect={false}
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.fieldLabel}>STARTING NUMBER</Text>
+              <TextInput
+                style={[styles.input, errors.commStartNum && styles.inputError]}
+                value={commStartNum}
+                onChangeText={t => { setCommStartNum(t); setErrors(e => ({ ...e, commStartNum: null })); }}
+                placeholder="e.g. 101"
+                placeholderTextColor={colors.outline}
+                keyboardType="number-pad"
+              />
+              {errors.commStartNum ? <Text style={styles.fieldError}>{errors.commStartNum}</Text> : null}
+            </View>
+          </View>
+
+          {estimatedRent > 0 ? (
+            <View style={styles.commercialCalcBox}>
+              <MaterialIcons name="info-outline" size={16} color={colors.primary} />
+              <Text style={styles.commercialCalcText}>
+                Estimated Average Rent:{' '}
+                <Text style={styles.commercialCalcBold}>
+                  ₹{estimatedRent.toLocaleString('en-IN')}/mo
+                </Text>{' '}
+                per office/shop
+              </Text>
+            </View>
+          ) : null}
         </View>
+      );
+    }
+
+    // Apartment configuration (default)
+    return (
+      <View>
+        <Text style={styles.stepTitle}>Unit Configuration</Text>
+        <Text style={styles.stepSubtitle}>Set up the unit and rent details</Text>
+
+        <Text style={styles.fieldLabel}>TOTAL APARTMENTS / UNITS</Text>
         <TextInput
-          style={[styles.input, styles.prefixInput, errors.avgRent && styles.inputError]}
-          value={avgRent}
-          onChangeText={t => { setAvgRent(t); setErrors(e => ({ ...e, avgRent: null })); }}
-          placeholder="e.g. 45000"
+          style={[styles.input, errors.totalUnits && styles.inputError]}
+          value={totalUnits}
+          onChangeText={t => { setTotalUnits(t); setErrors(e => ({ ...e, totalUnits: null })); }}
+          placeholder="e.g. 120"
           placeholderTextColor={colors.outline}
           keyboardType="number-pad"
         />
+        {errors.totalUnits ? <Text style={styles.fieldError}>{errors.totalUnits}</Text> : null}
+
+        <Text style={[styles.fieldLabel, { marginTop: 16 }]}>AVERAGE RENT PER APARTMENT</Text>
+        <View style={styles.prefixRow}>
+          <View style={styles.prefixBox}>
+            <Text style={styles.prefixText}>₹</Text>
+          </View>
+          <TextInput
+            style={[styles.input, styles.prefixInput, errors.avgRent && styles.inputError]}
+            value={avgRent}
+            onChangeText={t => { setAvgRent(t); setErrors(e => ({ ...e, avgRent: null })); }}
+            placeholder="e.g. 35000"
+            placeholderTextColor={colors.outline}
+            keyboardType="number-pad"
+          />
+        </View>
+        {errors.avgRent ? <Text style={styles.fieldError}>{errors.avgRent}</Text> : null}
       </View>
-      {errors.avgRent ? <Text style={styles.fieldError}>{errors.avgRent}</Text> : null}
-    </View>
-  );
+    );
+  };
 
   // ── Step 3: Review & Confirm ─────────────────────────────────────────────────
 
-  const annualRevenue = Number(avgRent) * Number(totalUnits) * 12;
+  const computedAvgRent = propertyType === 'commercial' ? Number(commArea) * Number(commRate) : Number(avgRent);
+  const annualRevenue = computedAvgRent * Number(totalUnits) * 12;
   const selectedType = PROPERTY_TYPES.find(pt => pt.key === propertyType);
 
   const renderStep3 = () => (
@@ -305,7 +491,11 @@ export default function AddPropertyScreen({ navigation }) {
             <MaterialIcons name={selectedType?.icon ?? 'apartment'} size={26} color={colors.onPrimary} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.reviewPropertyName}>{name}</Text>
+            <Text style={styles.reviewPropertyName}>
+              {propertyType === 'commercial'
+                ? `${commParkName.trim()} - ${commBuildingName.trim()}`
+                : name.trim()}
+            </Text>
             <View style={styles.reviewMetaRow}>
               <MaterialIcons name="location-on" size={13} color={colors.onSurfaceVariant} />
               <Text style={styles.reviewMeta}>{city}</Text>
@@ -315,13 +505,38 @@ export default function AddPropertyScreen({ navigation }) {
 
         <View style={styles.reviewDivider} />
 
-        <ReviewDetail icon={selectedType?.icon ?? 'apartment'} label="Property Type" value={selectedType?.label ?? 'Apartment'} />
+        {propertyType === 'commercial' ? (
+          <>
+            <ReviewDetail icon="business" label="Commercial Park" value={commParkName} />
+            <ReviewDetail icon="domain" label="Building / Tower" value={commBuildingName} />
+          </>
+        ) : (
+          <ReviewDetail icon={selectedType?.icon ?? 'apartment'} label="Property Type" value={selectedType?.label ?? 'Apartment'} />
+        )}
         <ReviewDetail icon="home" label="Address" value={address} />
-        <ReviewDetail icon="domain" label="Total Units" value={totalUnits} />
+        <ReviewDetail
+          icon="domain"
+          label={propertyType === 'commercial' ? "Total Offices / Shops" : "Total Units"}
+          value={totalUnits}
+        />
+        {propertyType === 'commercial' && (
+          <>
+            <ReviewDetail
+              icon="aspect-ratio"
+              label="Avg Area per Office"
+              value={`${Number(commArea).toLocaleString('en-IN')} sq. ft.`}
+            />
+            <ReviewDetail
+              icon="tag"
+              label="Office Numbering"
+              value={`Prefix: "${commPrefix}", Start: ${commStartNum}`}
+            />
+          </>
+        )}
         <ReviewDetail
           icon="payments"
-          label="Avg Rent / Unit"
-          value={`₹${Number(avgRent).toLocaleString('en-IN')}/mo`}
+          label={propertyType === 'commercial' ? "Avg Rent / Office" : "Avg Rent / Unit"}
+          value={`₹${computedAvgRent.toLocaleString('en-IN')}/mo`}
           accent
         />
         <ReviewDetail
@@ -368,15 +583,6 @@ export default function AddPropertyScreen({ navigation }) {
 
         {/* Footer navigation */}
         <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
-          {step > 1 ? (
-            <TouchableOpacity style={styles.backBtnFooter} onPress={handleBack}>
-              <MaterialIcons name="arrow-back" size={18} color={colors.primary} />
-              <Text style={styles.backBtnText}>Back</Text>
-            </TouchableOpacity>
-          ) : (
-            <View style={styles.footerSpacer} />
-          )}
-
           <View style={styles.nextBtnWrapper}>
             {step < 3 ? (
               <PrimaryButton label="Next" onPress={handleNext} icon="arrow-forward" />
@@ -488,6 +694,10 @@ const getStyles = (colors) => StyleSheet.create({
     minHeight: 68,
     paddingTop: 14,
   },
+  sideBySideRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
   inputError: {
     backgroundColor: colors.errorContainer,
   },
@@ -574,6 +784,25 @@ const getStyles = (colors) => StyleSheet.create({
     flex: 1,
     borderTopLeftRadius: 0,
     borderBottomLeftRadius: 0,
+  },
+
+  commercialCalcBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: colors.primaryContainer,
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 16,
+  },
+  commercialCalcText: {
+    fontFamily: fonts.interRegular,
+    fontSize: 13,
+    color: colors.onPrimaryContainer,
+  },
+  commercialCalcBold: {
+    fontFamily: fonts.manropeSemiBold,
+    fontWeight: 'bold',
   },
 
   // ── Review card ───────────────────────────────────────────────────────────────

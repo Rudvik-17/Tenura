@@ -1,7 +1,9 @@
 import React from 'react';
+import { Platform } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 import { MaterialIcons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../context/ThemeContext';
 import { fonts } from '../theme/typography';
 
@@ -67,15 +69,17 @@ function CommunityStackNav() {
 
 export default function TenantNavigator() {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
 
   const tabBarStyle = {
     backgroundColor: colors.surface,
     borderTopWidth: 1,
     borderTopColor: colors.surfaceContainerHigh,
     elevation: 8,
-    height: 64,
-    paddingBottom: 8,
+    height: Platform.OS === 'ios' ? (insets.bottom > 0 ? 58 + insets.bottom : 64) : 64,
+    paddingBottom: Platform.OS === 'ios' ? (insets.bottom > 0 ? insets.bottom - 4 : 8) : 8,
     paddingTop: 8,
+    paddingHorizontal: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -2 },
     shadowOpacity: 0.05,
@@ -91,7 +95,8 @@ export default function TenantNavigator() {
         tabBarInactiveTintColor: colors.outline,
         tabBarLabelStyle: {
           fontFamily: fonts.interMedium,
-          fontSize: 11,
+          fontSize: 10,
+          letterSpacing: -0.2,
         },
         tabBarIcon: ({ color, size }) => {
           const icons = {

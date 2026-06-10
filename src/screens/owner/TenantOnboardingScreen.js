@@ -565,14 +565,6 @@ export default function TenantOnboardingScreen({ navigation }) {
 
         {/* Footer */}
         <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
-          {step > 0 ? (
-            <TouchableOpacity style={styles.backBtnFooter} onPress={handleBack}>
-              <MaterialIcons name="arrow-back" size={18} color={colors.primary} />
-              <Text style={styles.backBtnText}>Back</Text>
-            </TouchableOpacity>
-          ) : (
-            <View style={styles.footerSpacer} />
-          )}
           <View style={styles.nextBtnWrapper}>
             <PrimaryButton
               label={step === TOTAL_STEPS - 1 ? 'Confirm & Add Tenant' : 'Next'}

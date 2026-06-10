@@ -18,7 +18,21 @@ import { fonts } from '../../theme/typography';
 import ScreenHeader from '../../components/ScreenHeader';
 import PrimaryButton from '../../components/PrimaryButton';
 
-const CITIES = ['Bangalore', 'Mumbai', 'Delhi', 'Chennai', 'Hyderabad', 'Pune', 'Kolkata'];
+const CITIES = [
+  'Agra', 'Ahmedabad', 'Agartala', 'Ajmer', 'Aligarh', 'Alwar', 'Allahabad (Prayagraj)', 'Amritsar',
+  'Aurangabad', 'Bangalore (Bengaluru)', 'Bareilly', 'Bathinda', 'Belgaum', 'Bhopal', 'Bhubaneswar',
+  'Bikaner', 'Bilaspur', 'Chandigarh', 'Chennai', 'Coimbatore', 'Cuttack', 'Dehradun', 'Delhi',
+  'Dhanbad', 'Dharamshala', 'Firozabad', 'Ghaziabad', 'Gorakhpur', 'Gulbarga', 'Guntur', 'Gurgaon (Gurugram)',
+  'Guwahati', 'Gwalior', 'Haldwani', 'Haridwar', 'Hubli-Dharwad', 'Hyderabad', 'Imphal', 'Indore',
+  'Jabalpur', 'Jaipur', 'Jalandhar', 'Jammu', 'Jamshedpur', 'Jhansi', 'Jodhpur', 'Kakinada',
+  'Kanpur', 'Kochi (Cochin)', 'Kohima', 'Kolkata', 'Kota', 'Kozhikode', 'Kurnool', 'Lucknow',
+  'Ludhiana', 'Madurai', 'Mangalore (Mangaluru)', 'Meerut', 'Moradabad', 'Mumbai', 'Muzaffarnagar',
+  'Mysore (Mysuru)', 'Nagpur', 'Nashik', 'Navi Mumbai', 'Nellore', 'Noida', 'Patiala', 'Patna',
+  'Pondicherry', 'Pune', 'Raipur', 'Rajkot', 'Ranchi', 'Roorkee', 'Rourkela', 'Saharanpur',
+  'Salem', 'Shillong', 'Shimla', 'Siliguri', 'Solapur', 'Srinagar', 'Surat', 'Thane',
+  'Thiruvananthapuram', 'Tiruchirappalli', 'Tirupati', 'Tiruppur', 'Udaipur', 'Vadodara',
+  'Varanasi', 'Vellore', 'Vijayawada', 'Visakhapatnam', 'Warangal'
+];
 
 export default function EditPropertyScreen({ navigation, route }) {
   const { colors } = useTheme();
@@ -104,7 +118,7 @@ export default function EditPropertyScreen({ navigation, route }) {
               style={[styles.input, errors.name && styles.inputError]}
               value={name}
               onChangeText={t => { setName(t); setErrors(e => ({ ...e, name: null })); }}
-              placeholder="e.g. The Sterling Heights"
+              placeholder="e.g. Prestige Shantiniketan"
               placeholderTextColor={colors.outline}
               autoCapitalize="words"
               autoCorrect={false}
@@ -117,7 +131,7 @@ export default function EditPropertyScreen({ navigation, route }) {
               style={[styles.input, styles.multilineInput, errors.address && styles.inputError]}
               value={address}
               onChangeText={t => { setAddress(t); setErrors(e => ({ ...e, address: null })); }}
-              placeholder="Street, locality"
+              placeholder="e.g. Flat 402, Block B, Raheja Mindspace"
               placeholderTextColor={colors.outline}
               autoCapitalize="sentences"
               multiline

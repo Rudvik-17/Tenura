@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { View } from 'react-native';
 import { useFonts } from 'expo-font';
 import {
   Manrope_400Regular,
@@ -52,10 +53,12 @@ export default function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <RootNavigator />
-        {splashActive && (
-          <SplashAnimation onFinish={handleSplashFinish} />
-        )}
+        <View style={{ flex: 1 }}>
+          <RootNavigator />
+          {splashActive && (
+            <SplashAnimation onFinish={handleSplashFinish} />
+          )}
+        </View>
       </AuthProvider>
     </ThemeProvider>
   );

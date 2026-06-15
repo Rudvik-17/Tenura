@@ -127,13 +127,41 @@ export default function AddPropertyScreen({ navigation }) {
     } else {
       const rent = Number(avgRent);
       if (!avgRent.trim()) {
-        errs.avgRent = 'Average rent is required.';
+        errs.avgRent = 'Rent per unit is required.';
       } else if (isNaN(rent) || rent <= 0) {
         errs.avgRent = 'Enter a valid rent amount.';
       }
     }
     setErrors(errs);
     return Object.keys(errs).length === 0;
+  };
+
+  const isNextDisabled = () => {
+    if (step === 1) {
+      if (propertyType === 'commercial') {
+        return (
+          !commParkName.trim() ||
+          !commBuildingName.trim() ||
+          !address.trim() ||
+          !city.trim()
+        );
+      } else {
+        return !name.trim() || !address.trim() || !city.trim();
+      }
+    }
+    if (step === 2) {
+      if (propertyType === 'commercial') {
+        return (
+          !totalUnits.trim() ||
+          !commArea.trim() ||
+          !commRate.trim() ||
+          !commStartNum.trim()
+        );
+      } else {
+        return !totalUnits.trim() || !avgRent.trim();
+      }
+    }
+    return false;
   };
 
   // ── Navigation ───────────────────────────────────────────────────────────────
@@ -425,7 +453,7 @@ export default function AddPropertyScreen({ navigation }) {
             <View style={styles.commercialCalcBox}>
               <MaterialIcons name="info-outline" size={16} color={colors.primary} />
               <Text style={styles.commercialCalcText}>
-                Estimated Average Rent:{' '}
+                Estimated Rent per Unit:{' '}
                 <Text style={styles.commercialCalcBold}>
                   ₹{estimatedRent.toLocaleString('en-IN')}/mo
                 </Text>{' '}
@@ -454,7 +482,7 @@ export default function AddPropertyScreen({ navigation }) {
         />
         {errors.totalUnits ? <Text style={styles.fieldError}>{errors.totalUnits}</Text> : null}
 
-        <Text style={[styles.fieldLabel, { marginTop: 16 }]}>AVERAGE RENT PER APARTMENT</Text>
+        <Text style={[styles.fieldLabel, { marginTop: 16 }]}>RENT PER UNIT</Text>
         <View style={styles.prefixRow}>
           <View style={styles.prefixBox}>
             <Text style={styles.prefixText}>₹</Text>
@@ -476,7 +504,6 @@ export default function AddPropertyScreen({ navigation }) {
   // ── Step 3: Review & Confirm ─────────────────────────────────────────────────
 
   const computedAvgRent = propertyType === 'commercial' ? Number(commArea) * Number(commRate) : Number(avgRent);
-  const annualRevenue = computedAvgRent * Number(totalUnits) * 12;
   const selectedType = PROPERTY_TYPES.find(pt => pt.key === propertyType);
 
   const renderStep3 = () => (
@@ -535,14 +562,8 @@ export default function AddPropertyScreen({ navigation }) {
         )}
         <ReviewDetail
           icon="payments"
-          label={propertyType === 'commercial' ? "Avg Rent / Office" : "Avg Rent / Unit"}
+          label={propertyType === 'commercial' ? "Rent / Office" : "Rent / Unit"}
           value={`₹${computedAvgRent.toLocaleString('en-IN')}/mo`}
-          accent
-        />
-        <ReviewDetail
-          icon="trending-up"
-          label="Annual Revenue (est.)"
-          value={`₹${annualRevenue.toLocaleString('en-IN')}`}
           accent
           last
         />
@@ -585,7 +606,12 @@ export default function AddPropertyScreen({ navigation }) {
         <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
           <View style={styles.nextBtnWrapper}>
             {step < 3 ? (
-              <PrimaryButton label="Next" onPress={handleNext} icon="arrow-forward" />
+              <PrimaryButton
+                label="Next"
+                onPress={handleNext}
+                icon="arrow-forward"
+                disabled={isNextDisabled()}
+              />
             ) : (
               <PrimaryButton
                 label="Confirm & Add Property"

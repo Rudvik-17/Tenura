@@ -67,10 +67,9 @@ export default function OwnerDashboard({ navigation }) {
       // Bug 1 fix: query payments via tenants join — payments has no owner_id column
       supabase
         .from('payments')
-        .select('amount, tenants!inner(owner_id)')
+        .select('amount, paid_at, tenants!inner(owner_id)')
         .eq('tenants.owner_id', user.id)
-        .eq('status', 'paid')
-        .gte('paid_at', startOfMonth),
+        .eq('status', 'paid'),
       propertyIds.length > 0
         ? supabase
             .from('maintenance_requests')
@@ -90,7 +89,12 @@ export default function OwnerDashboard({ navigation }) {
     const txs = txRes.data ?? [];
     const totalUnits = props.reduce((s, p) => s + p.total_units, 0);
     const activeLeases = props.flatMap(p => p.leases).filter(l => l.status === 'active').length;
-    const mtdCollected = (paymentsRes.data ?? []).reduce((s, p) => s + Number(p.amount), 0);
+    const paidPayments = paymentsRes.data ?? [];
+    const totalCollected = paidPayments.reduce((s, p) => s + Number(p.amount), 0);
+    const startOfMonthTime = new Date(startOfMonth).getTime();
+    const mtdCollected = paidPayments
+      .filter(p => p.paid_at && new Date(p.paid_at).getTime() >= startOfMonthTime)
+      .reduce((s, p) => s + Number(p.amount), 0);
     const activeIssuesData = issuesRes.data ?? [];
     const activeIssues = activeIssuesData.length;
     const urgentIssues = activeIssuesData.filter(i => i.priority === 'high').length;
@@ -103,7 +107,7 @@ export default function OwnerDashboard({ navigation }) {
 
     setProperties(props);
     setTransactions(txs);
-    setMetrics({ totalUnits, activeLeases, mtdCollected, expiringLeases, activeIssues, urgentIssues });
+    setMetrics({ totalUnits, activeLeases, totalCollected, mtdCollected, expiringLeases, activeIssues, urgentIssues });
     setLoading(false);
     setRefreshing(false);
   }, [user?.id]);
@@ -120,9 +124,7 @@ export default function OwnerDashboard({ navigation }) {
     return `₹${n.toLocaleString('en-IN')}`;
   };
 
-  const totalPortfolioValue = properties.reduce(
-    (s, p) => s + p.avg_rent * p.total_units * 12, 0
-  );
+
 
   if (loading) {
     return (
@@ -188,8 +190,8 @@ export default function OwnerDashboard({ navigation }) {
       >
         {/* Hero summary */}
         <View style={styles.heroSection}>
-          <Text style={styles.heroLabel}>MY PROPERTIES</Text>
-          <Text style={styles.heroValue}>{formatCrore(totalPortfolioValue)}</Text>
+          <Text style={styles.heroLabel}>RENT COLLECTED</Text>
+          <Text style={styles.heroValue}>{formatCrore(metrics?.totalCollected ?? 0)}</Text>
           <Text style={styles.heroSubtitle}>
             {properties.length} {properties.length === 1 ? 'property' : 'properties'} · Managed portfolio
           </Text>
@@ -204,11 +206,17 @@ export default function OwnerDashboard({ navigation }) {
               label="Occupied Units"
             />
             <View style={styles.metricGap} />
-            <MetricCard
-              icon="payments"
-              value={formatCrore(metrics?.mtdCollected ?? 0)}
-              label="Collected (MTD)"
-            />
+            <TouchableOpacity
+              style={{ flex: 1 }}
+              onPress={() => navigation.getParent()?.navigate('Finance')}
+              activeOpacity={0.8}
+            >
+              <MetricCard
+                icon="payments"
+                value={formatCrore(metrics?.mtdCollected ?? 0)}
+                label="Monthly Inputs"
+              />
+            </TouchableOpacity>
           </View>
           <View style={[styles.metricsRow, { marginTop: 12 }]}>
             <TouchableOpacity
@@ -260,7 +268,7 @@ export default function OwnerDashboard({ navigation }) {
                       <Text style={styles.propertyMetaText}>{property.city}</Text>
                     </View>
                     <Text style={styles.propertyDetail}>
-                      {activeLeaseCount} / {property.total_units} occupied · Avg ₹{Number(property.avg_rent).toLocaleString('en-IN')}/mo
+                      {activeLeaseCount} / {property.total_units} occupied · ₹{Number(property.avg_rent).toLocaleString('en-IN')}/mo per unit
                     </Text>
                   </View>
                   <MaterialIcons name="chevron-right" size={20} color={colors.onSurfaceVariant} />

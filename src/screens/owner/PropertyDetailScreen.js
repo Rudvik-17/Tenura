@@ -173,7 +173,7 @@ export default function PropertyDetailScreen({ navigation, route }) {
               <MaterialIcons name="trending-up" size={20} color={colors.primary} />
             </View>
             <View style={styles.revenueInfo}>
-              <Text style={styles.revenueLabel}>AVG RENT PER UNIT</Text>
+              <Text style={styles.revenueLabel}>RENT PER UNIT</Text>
               <Text style={styles.revenueValue}>
                 ₹{Number(property.avg_rent).toLocaleString('en-IN')}
               </Text>

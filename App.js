@@ -40,6 +40,10 @@ export default function App() {
     requestPermissions();
   }, []);
 
+  const handleSplashFinish = React.useCallback(() => {
+    setSplashActive(false);
+  }, []);
+
   // Hold render until fonts are ready or 3s timeout has passed.
   if (!fontsLoaded && !fontTimeout) {
     return null;
@@ -50,7 +54,7 @@ export default function App() {
       <AuthProvider>
         <RootNavigator />
         {splashActive && (
-          <SplashAnimation onFinish={() => setSplashActive(false)} />
+          <SplashAnimation onFinish={handleSplashFinish} />
         )}
       </AuthProvider>
     </ThemeProvider>

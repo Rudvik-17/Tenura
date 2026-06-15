@@ -21,6 +21,12 @@ export default function SplashAnimation({ onFinish }) {
   const textTranslateY = useRef(new Animated.Value(20)).current;
   const splashOpacity = useRef(new Animated.Value(1)).current;
 
+  const onFinishRef = useRef(onFinish);
+
+  useEffect(() => {
+    onFinishRef.current = onFinish;
+  }, [onFinish]);
+
   useEffect(() => {
     // Run animations in sequence and parallel
     Animated.sequence([
@@ -72,11 +78,11 @@ export default function SplashAnimation({ onFinish }) {
         useNativeDriver: true,
       }),
     ]).start(() => {
-      if (onFinish) {
-        onFinish();
+      if (onFinishRef.current) {
+        onFinishRef.current();
       }
     });
-  }, [glowOpacity, glowScale, logoScale, logoRotate, textOpacity, textTranslateY, splashOpacity, onFinish]);
+  }, []);
 
   // Interpolate rotation
   const spin = logoRotate.interpolate({

@@ -66,7 +66,7 @@ export default function EditPropertyScreen({ navigation, route }) {
     if (!totalUnits.trim()) errs.totalUnits = 'Total units is required.';
     else if (!Number.isInteger(units) || units <= 0) errs.totalUnits = 'Enter a valid number of units.';
     const rent = Number(avgRent);
-    if (!avgRent.trim()) errs.avgRent = 'Average rent is required.';
+    if (!avgRent.trim()) errs.avgRent = 'Rent per unit is required.';
     else if (isNaN(rent) || rent <= 0) errs.avgRent = 'Enter a valid rent amount.';
     setErrors(errs);
     return Object.keys(errs).length === 0;
@@ -186,7 +186,7 @@ export default function EditPropertyScreen({ navigation, route }) {
             {errors.totalUnits ? <Text style={styles.fieldError}>{errors.totalUnits}</Text> : null}
 
             {/* Average Rent */}
-            <Text style={[styles.fieldLabel, { marginTop: 16 }]}>AVERAGE RENT PER UNIT</Text>
+            <Text style={[styles.fieldLabel, { marginTop: 16 }]}>RENT PER UNIT</Text>
             <View style={styles.prefixRow}>
               <View style={styles.prefixBox}>
                 <Text style={styles.prefixText}>₹</Text>

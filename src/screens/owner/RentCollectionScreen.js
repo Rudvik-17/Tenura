@@ -152,7 +152,7 @@ export default function RentCollectionScreen() {
                 <MetricCard
                   icon="payments"
                   value={fmt(mtdCollected)}
-                  label="Collected MTD"
+                  label="Monthly Inputs"
                   trendUp
                 />
                 <View style={{ width: 12 }} />

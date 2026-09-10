@@ -27,8 +27,6 @@ import StatusChip from '../../components/StatusChip';
 import PrimaryButton from '../../components/PrimaryButton';
 import { RateLimitedButton } from '../../components/RateLimitedButton';
 
-let caseCounter = 4903;
-
 export default function MaintenanceRequestScreen({ navigation, route }) {
   const { colors } = useTheme();
   const styles = getStyles(colors);
@@ -55,6 +53,7 @@ export default function MaintenanceRequestScreen({ navigation, route }) {
   const [priority, setPriority] = useState('');
   const [describeIssue, setDescribeIssue] = useState('');
   const [hasPhoto, setHasPhoto] = useState(false);
+  const [photoUri, setPhotoUri] = useState(null);
 
   // Step 2 Form state
   const [contactPreference, setContactPreference] = useState('');
@@ -167,6 +166,7 @@ export default function MaintenanceRequestScreen({ navigation, route }) {
       });
 
       if (!result.canceled && result.assets?.[0]?.uri) {
+        setPhotoUri(result.assets[0].uri);
         setHasPhoto(true);
       }
     } catch (err) {
@@ -191,6 +191,7 @@ export default function MaintenanceRequestScreen({ navigation, route }) {
       });
 
       if (!result.canceled && result.assets?.[0]?.uri) {
+        setPhotoUri(result.assets[0].uri);
         setHasPhoto(true);
       }
     } catch (err) {
@@ -209,6 +210,7 @@ export default function MaintenanceRequestScreen({ navigation, route }) {
         } else if (option === 'Choose from Library') {
           await handleChooseFromLibrary();
         } else {
+          setPhotoUri(null);
           setHasPhoto(false);
         }
       }
@@ -237,7 +239,6 @@ export default function MaintenanceRequestScreen({ navigation, route }) {
     if (Object.keys(errors).length > 0) return;
 
     setSubmitting(true);
-    const caseNumber = `EL-${caseCounter++}`;
     
     // Subject built from Category + Specific location detail
     const subject = `${category} in ${locationDetails}`;
@@ -245,7 +246,38 @@ export default function MaintenanceRequestScreen({ navigation, route }) {
     // Details field populated with description, toggles and notes for backwards compatibility
     const details = `${describeIssue}\n\nContact Preference: ${contactPreference}\nAnimal: ${hasAnimal ? 'Yes' : 'No'}\nAllow Entry: ${allowEntry ? 'Yes' : 'No'}${entryNote.trim() ? '\nEntry Notes: ' + entryNote.trim() : ''}`;
 
-    const { error: insertError } = await supabase
+    // Upload photo to Supabase Storage if one was captured
+    let uploadedPhotoUrl = null;
+    if (photoUri) {
+      try {
+        const ext = photoUri.split('.').pop() || 'jpg';
+        const fileName = `${tenantId || user?.id || 'temp'}/${Date.now()}.${ext}`;
+        const response = await fetch(photoUri);
+        const blob = await response.blob();
+        const arrayBuffer = await new Response(blob).arrayBuffer();
+
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('maintenance-photos')
+          .upload(fileName, arrayBuffer, {
+            contentType: `image/${ext === 'jpg' ? 'jpeg' : ext}`,
+            upsert: true,
+          });
+
+        if (!uploadError && uploadData) {
+          const { data: urlData } = supabase.storage
+            .from('maintenance-photos')
+            .getPublicUrl(fileName);
+          uploadedPhotoUrl = urlData?.publicUrl || fileName;
+        } else if (uploadError) {
+          console.warn('Photo upload failed:', uploadError.message);
+        }
+      } catch (uploadErr) {
+        console.warn('Photo upload error:', uploadErr.message);
+      }
+    }
+
+    // Insert maintenance request (case_number generated automatically by DB sequence default)
+    const { data: insertedRows, error: insertError } = await supabase
       .from('maintenance_requests')
       .insert({
         tenant_id: tenantId,
@@ -254,8 +286,8 @@ export default function MaintenanceRequestScreen({ navigation, route }) {
         details,
         status: 'open',
         priority: priority.toLowerCase(),
-        case_number: caseNumber,
         resolution_progress: 0,
+        photo_url: uploadedPhotoUrl,
         // Detailed columns
         location_type: locationType,
         location_details: locationDetails,
@@ -264,13 +296,17 @@ export default function MaintenanceRequestScreen({ navigation, route }) {
         has_animal: hasAnimal,
         entry_note: entryNote.trim() || null,
         allow_entry: allowEntry,
-      });
+      })
+      .select('id, case_number')
+      .single();
 
     setSubmitting(false);
     if (insertError) {
       Alert.alert('Error', insertError.message);
       return;
     }
+
+    const finalCaseNumber = insertedRows?.case_number || 'New Request';
 
     // Reset Form state
     setStep(1);
@@ -280,6 +316,7 @@ export default function MaintenanceRequestScreen({ navigation, route }) {
     setPriority('');
     setDescribeIssue('');
     setHasPhoto(false);
+    setPhotoUri(null);
     setContactPreference('');
     setHasAnimal(false);
     setEntryNote('');
@@ -288,7 +325,7 @@ export default function MaintenanceRequestScreen({ navigation, route }) {
 
     Alert.alert(
       'Request Submitted',
-      `Your maintenance request (${caseNumber}) has been submitted.`,
+      `Your maintenance request (${finalCaseNumber}) has been submitted.`,
       [
         {
           text: 'OK',

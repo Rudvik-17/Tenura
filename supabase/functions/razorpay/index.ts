@@ -36,17 +36,50 @@ serve(async (req) => {
     return new Response('ok', { headers: corsHeaders })
   }
 
-  const rawIp = req.headers.get('x-forwarded-for');
-  const ip = rawIp ? rawIp.split(',')[0].trim() : 'unknown';
-  const key = `razorpay:${ip}`;
-  
-  const now = new Date();
-  const limit = 5; // Razorpay payment function gets limit of 5 per minute
-  const windowMs = 60000;
-  
   const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
   const supabaseServiceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
   const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey);
+
+  const now = new Date();
+  const limit = 5; // Razorpay payment function gets limit of 5 per minute
+  const windowMs = 60000;
+
+  // 4B: Extract caller identifier reliably (prefer JWT user sub, fallback to IP)
+  let clientIdentifier = '';
+  const authHeader = req.headers.get('authorization') || '';
+  if (authHeader.startsWith('Bearer ')) {
+    try {
+      const token = authHeader.replace('Bearer ', '').trim();
+      const parts = token.split('.');
+      if (parts.length === 3) {
+        const payloadJson = atob(parts[1]);
+        const jwtPayload = JSON.parse(payloadJson);
+        if (jwtPayload?.sub) {
+          clientIdentifier = `usr_${jwtPayload.sub}`;
+        }
+      }
+    } catch {
+      // ignore decoding error
+    }
+  }
+
+  if (!clientIdentifier) {
+    const rawIp = req.headers.get('cf-connecting-ip')
+      || req.headers.get('x-real-ip')
+      || req.headers.get('x-forwarded-for')?.split(',')[0].trim()
+      || 'anon_client';
+    clientIdentifier = `ip_${rawIp}`;
+  }
+
+  const key = `razorpay:${clientIdentifier}`;
+
+  // 4B: Asynchronously purge expired rate limits to keep table bounded
+  supabaseAdmin
+    .from('rate_limits')
+    .delete()
+    .lt('reset_at', now.toISOString())
+    .then(() => {})
+    .catch((err: Error) => console.warn('Rate limit cleanup error:', err.message));
 
   let isLimited = false;
   let retryAfter = 60;
@@ -105,15 +138,55 @@ serve(async (req) => {
     const { action, ...payload } = await req.json();
 
     if (action === 'create-order') {
-      const { amount, paymentId } = payload;
-      if (!amount || !paymentId) {
-        return new Response(JSON.stringify({ error: 'Missing amount or paymentId' }), {
+      const { paymentId } = payload;
+      if (!paymentId) {
+        return new Response(JSON.stringify({ error: 'Missing paymentId' }), {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }
 
-      const amountInPaise = Math.round(amount * 100);
+      // 1G: Server-side validation of payment row and amount
+      const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
+      const supabaseServiceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+      const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
+
+      let verifiedAmount = 0;
+
+      if (paymentId === 'mock-payment-id') {
+        // Fallback for simulation / mock payments
+        verifiedAmount = Number(payload.amount) || 15000;
+      } else {
+        const { data: paymentRow, error: pError } = await supabase
+          .from('payments')
+          .select('id, amount, status')
+          .eq('id', paymentId)
+          .single();
+
+        if (pError || !paymentRow) {
+          return new Response(JSON.stringify({ error: 'Payment record not found' }), {
+            status: 404,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        }
+
+        if (paymentRow.status === 'paid') {
+          return new Response(JSON.stringify({ error: 'Payment is already marked as paid' }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        }
+
+        verifiedAmount = Number(paymentRow.amount);
+        if (!verifiedAmount || verifiedAmount <= 0) {
+          return new Response(JSON.stringify({ error: 'Invalid payment amount in database' }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        }
+      }
+
+      const amountInPaise = Math.round(verifiedAmount * 100);
 
       const response = await fetch('https://api.razorpay.com/v1/orders', {
         method: 'POST',
@@ -133,7 +206,7 @@ serve(async (req) => {
         throw new Error(order.error?.description || 'Failed to create Razorpay order');
       }
 
-      return new Response(JSON.stringify({ orderId: order.id }), {
+      return new Response(JSON.stringify({ orderId: order.id, verifiedAmount }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
@@ -161,7 +234,7 @@ serve(async (req) => {
       const supabaseServiceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
       const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
 
-      const { error: dbError } = await supabase
+      const { data: updatedRows, error: dbError } = await supabase
         .from('payments')
         .update({
           status: 'paid',
@@ -171,10 +244,18 @@ serve(async (req) => {
           razorpay_payment_id: razorpay_payment_id,
           razorpay_order_id: razorpay_order_id
         })
-        .eq('id', paymentId);
+        .eq('id', paymentId)
+        .select('id');
 
       if (dbError) {
         throw new Error(dbError.message);
+      }
+
+      if (!updatedRows || updatedRows.length === 0) {
+        return new Response(JSON.stringify({ error: 'Payment record not found to update' }), {
+          status: 404,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
       }
 
       return new Response(JSON.stringify({ success: true }), {

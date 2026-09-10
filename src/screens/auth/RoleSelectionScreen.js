@@ -64,7 +64,12 @@ export default function RoleSelectionScreen() {
 
     const { error: upsertError } = await supabase
       .from('users')
-      .upsert({ id: user.id, role: roleKey }, { onConflict: 'id' });
+      .upsert({
+        id: user.id,
+        role: roleKey,
+        email: user.email || '',
+        full_name: user.user_metadata?.full_name || '',
+      }, { onConflict: 'id' });
 
     if (upsertError) {
       setLoading(null);

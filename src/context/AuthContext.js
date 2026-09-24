@@ -52,28 +52,49 @@ export const AuthProvider = ({ children }) => {
   // account gets connected to the row the owner pre-created.
   const linkTenantIfNeeded = async (authUser) => {
     if (!authUser?.email) return;
-    const { data } = await supabase
-      .from('tenants')
-      .select('id')
-      .eq('email', authUser.email)
-      .is('user_id', null)
-      .limit(1);
-    if (data?.[0]) {
-      // 1. Link tenant row to user
-      await supabase
+    try {
+      const normalizedEmail = authUser.email.trim().toLowerCase();
+      const { data, error: fetchErr } = await supabase
         .from('tenants')
-        .update({ user_id: authUser.id, status: 'active' })
-        .eq('id', data[0].id);
+        .select('id')
+        .ilike('email', normalizedEmail)
+        .is('user_id', null)
+        .limit(1);
 
-      // 2. Auto-set role to 'tenant' in users table
-      await supabase
-        .from('users')
-        .upsert({
-          id: authUser.id,
-          role: 'tenant',
-          full_name: authUser.user_metadata?.full_name || '',
-          email: authUser.email || ''
-        }, { onConflict: 'id' });
+      if (fetchErr) {
+        console.warn('Error checking unlinked tenant:', fetchErr.message);
+        return;
+      }
+
+      if (data?.[0]) {
+        // 1. Ensure user profile exists in public.users FIRST (satisfies FK constraint tenants_user_id_fkey)
+        const { error: userUpsertErr } = await supabase
+          .from('users')
+          .upsert({
+            id: authUser.id,
+            role: 'tenant',
+            full_name: authUser.user_metadata?.full_name || '',
+            email: authUser.email || ''
+          }, { onConflict: 'id' });
+
+        if (userUpsertErr) {
+          console.warn('Could not upsert user role before tenant link:', userUpsertErr.message);
+        }
+
+        // 2. Link tenant row to user
+        const { error: linkErr } = await supabase
+          .from('tenants')
+          .update({ user_id: authUser.id, status: 'active' })
+          .eq('id', data[0].id);
+
+        if (linkErr) {
+          console.warn('Could not link tenant account:', linkErr.message);
+        } else {
+          console.log(`Successfully linked tenant ${data[0].id} to user ${authUser.id}`);
+        }
+      }
+    } catch (err) {
+      console.warn('linkTenantIfNeeded exception:', err.message);
     }
   };
 

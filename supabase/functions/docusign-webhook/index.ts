@@ -63,6 +63,24 @@ function parseJsonPayload(body: Record<string, unknown>): { envelopeId: string; 
   return { envelopeId, status }
 }
 
+async function computeHmacSha256Base64(keyStr: string, dataStr: string): Promise<string> {
+  const enc = new TextEncoder()
+  const key = await crypto.subtle.importKey(
+    'raw',
+    enc.encode(keyStr),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  )
+  const sigBuffer = await crypto.subtle.sign('HMAC', key, enc.encode(dataStr))
+  const bytes = new Uint8Array(sigBuffer)
+  let binary = ''
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i])
+  }
+  return btoa(binary)
+}
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -76,6 +94,29 @@ serve(async (req) => {
   try {
     const contentType = req.headers.get('content-type') || ''
     const rawBody = await req.text()
+
+    // 1E: DocuSign HMAC signature verification
+    const hmacKey = Deno.env.get('DOCUSIGN_HMAC_KEY')
+    if (hmacKey) {
+      const sigHeader = req.headers.get('x-docusign-signature-1')
+      if (!sigHeader) {
+        console.error('DocuSign webhook rejected: Missing x-docusign-signature-1 header')
+        return new Response(JSON.stringify({ error: 'Missing HMAC signature' }), {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+
+      const expectedSig = await computeHmacSha256Base64(hmacKey, rawBody)
+      const signatures = sigHeader.split(',').map((s) => s.trim())
+      if (!signatures.includes(expectedSig)) {
+        console.error('DocuSign webhook rejected: Invalid HMAC signature')
+        return new Response(JSON.stringify({ error: 'Invalid HMAC signature' }), {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+    }
 
     let parsed: { envelopeId: string; status: string } | null = null
 

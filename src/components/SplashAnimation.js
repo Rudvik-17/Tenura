@@ -6,6 +6,7 @@ import {
   Animated,
   Dimensions,
   StatusBar,
+  Image,
 } from 'react-native';
 import { fonts } from '../theme/typography';
 
@@ -15,8 +16,8 @@ export default function SplashAnimation({ onFinish }) {
   // Animated values
   const glowScale = useRef(new Animated.Value(0.2)).current;
   const glowOpacity = useRef(new Animated.Value(0)).current;
-  const logoScale = useRef(new Animated.Value(0)).current;
-  const logoRotate = useRef(new Animated.Value(0)).current;
+  const logoScale = useRef(new Animated.Value(0.4)).current;
+  const logoOpacity = useRef(new Animated.Value(0)).current;
   const textOpacity = useRef(new Animated.Value(0)).current;
   const textTranslateY = useRef(new Animated.Value(20)).current;
   const splashOpacity = useRef(new Animated.Value(1)).current;
@@ -33,27 +34,27 @@ export default function SplashAnimation({ onFinish }) {
       // 1. Initial fade-in of background glow
       Animated.parallel([
         Animated.timing(glowOpacity, {
-          toValue: 0.6,
+          toValue: 0.7,
           duration: 600,
           useNativeDriver: true,
         }),
         Animated.timing(glowScale, {
-          toValue: 1.5,
+          toValue: 1.6,
           duration: 1200,
           useNativeDriver: true,
         }),
       ]),
-      // 2. Spring-scale and rotate the logo
+      // 2. Spring-scale and fade in the real brand logo
       Animated.parallel([
         Animated.spring(logoScale, {
           toValue: 1,
           friction: 6,
-          tension: 40,
+          tension: 45,
           useNativeDriver: true,
         }),
-        Animated.timing(logoRotate, {
+        Animated.timing(logoOpacity, {
           toValue: 1,
-          duration: 800,
+          duration: 600,
           useNativeDriver: true,
         }),
       ]),
@@ -84,12 +85,6 @@ export default function SplashAnimation({ onFinish }) {
     });
   }, []);
 
-  // Interpolate rotation
-  const spin = logoRotate.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
-  });
-
   return (
     <Animated.View style={[styles.container, { opacity: splashOpacity }]}>
       <StatusBar barStyle="light-content" backgroundColor="#0C0B14" />
@@ -111,15 +106,16 @@ export default function SplashAnimation({ onFinish }) {
           style={[
             styles.logoContainer,
             {
-              transform: [{ scale: logoScale }, { rotate: spin }],
+              opacity: logoOpacity,
+              transform: [{ scale: logoScale }],
             },
           ]}
         >
-          {/* Overlapping premium geometric lines representation of "E" and "L" (EstateLogic) */}
-          <View style={styles.outerRing}>
-            <View style={styles.innerRing} />
-            <View style={styles.diagonalAccent} />
-          </View>
+          <Image
+            source={require('../../assets/icon.png')}
+            style={styles.logoImage}
+            resizeMode="contain"
+          />
         </Animated.View>
 
         {/* Brand Text */}
@@ -155,13 +151,13 @@ const styles = StyleSheet.create({
   },
   glow: {
     position: 'absolute',
-    width: 250,
-    height: 250,
-    borderRadius: 125,
+    width: 260,
+    height: 260,
+    borderRadius: 130,
     backgroundColor: 'rgba(0, 229, 255, 0.25)', // Neon Cyan glow base
     shadowColor: '#D84CFF', // Neon magenta secondary glow
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
+    shadowOpacity: 0.85,
     shadowRadius: 100,
     elevation: 10,
   },
@@ -171,40 +167,20 @@ const styles = StyleSheet.create({
     gap: 24,
   },
   logoContainer: {
-    width: 100,
-    height: 100,
+    width: 120,
+    height: 120,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#00E5FF',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.45,
+    shadowRadius: 20,
+    elevation: 10,
   },
-  outerRing: {
-    width: 90,
-    height: 90,
-    borderRadius: 45,
-    borderWidth: 5,
-    borderColor: '#00E5FF', // Neon cyan border
-    borderTopColor: '#D84CFF', // Neon magenta accent
-    borderRightColor: '#D84CFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    position: 'relative',
-  },
-  innerRing: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    borderWidth: 4,
-    borderColor: '#F5F3F7', // Ice-white
-    borderBottomColor: 'transparent',
-  },
-  diagonalAccent: {
-    position: 'absolute',
-    width: 5,
-    height: 40,
-    backgroundColor: '#00FF9D', // Glowing neon green
-    transform: [{ rotate: '45deg' }],
-    bottom: 12,
-    right: 22,
-    borderRadius: 3,
+  logoImage: {
+    width: 120,
+    height: 120,
+    borderRadius: 28,
   },
   textContainer: {
     alignItems: 'center',
@@ -215,7 +191,7 @@ const styles = StyleSheet.create({
     fontSize: 32,
     fontWeight: '800',
     color: '#F5F3F7',
-    letterSpacing: 1.5,
+    letterSpacing: 2,
   },
   subtitleText: {
     fontFamily: fonts.interMedium || 'System',

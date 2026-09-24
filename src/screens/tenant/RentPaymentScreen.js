@@ -235,6 +235,11 @@ export default function RentPaymentScreen({ navigation }) {
   const [showRealRazorpay, setShowRealRazorpay] = useState(false);
   const [razorpayHtml, setRazorpayHtml] = useState('');
 
+  // UPI Manual Verification states
+  const [showUtrModal, setShowUtrModal] = useState(false);
+  const [utrInput, setUtrInput] = useState('');
+  const [submittingUtr, setSubmittingUtr] = useState(false);
+
   const fetchPayment = useCallback(async () => {
     if (!user) return;
     setError(null);
@@ -472,16 +477,94 @@ export default function RentPaymentScreen({ navigation }) {
     }
   }, [payment, selectedMethod, navigation]);
 
-  // When the user returns from their UPI app, complete the payment
+  // When the user returns from their UPI app, confirm if they completed payment instead of auto-marking paid
   useEffect(() => {
-    const subscription = AppState.addEventListener('change', async (nextState) => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
       if (nextState === 'active' && awaitingUpiReturn.current) {
         awaitingUpiReturn.current = false;
-        await markPaymentPaid();
+        setPaying(false);
+        Alert.alert(
+          'Confirm Payment',
+          'Did you complete the payment in your UPI app?',
+          [
+            {
+              text: 'No, Cancelled',
+              style: 'cancel',
+              onPress: () => {
+                setPaying(false);
+              },
+            },
+            {
+              text: 'Yes, I Paid',
+              onPress: () => {
+                setShowUtrModal(true);
+              },
+            },
+          ],
+          { cancelable: false }
+        );
       }
     });
     return () => subscription.remove();
-  }, [markPaymentPaid]);
+  }, []);
+
+  const handleUtrSubmit = async () => {
+    const trimmedUtr = utrInput.trim();
+    if (!trimmedUtr || trimmedUtr.length < 6) {
+      Alert.alert('Invalid Reference', 'Please enter a valid UPI reference number (UTR).');
+      return;
+    }
+
+    setSubmittingUtr(true);
+    const now = new Date().toISOString();
+
+    if (payment && payment.id === 'mock-payment-id') {
+      setSubmittingUtr(false);
+      setShowUtrModal(false);
+      setUtrInput('');
+      navigation.navigate('PaymentSuccess', {
+        amount: payment.amount,
+        method: selectedMethod,
+        txnId: 'UPI-' + trimmedUtr,
+        paidAt: now,
+      });
+      return;
+    }
+
+    try {
+      const { data: rpcResult, error: rpcErr } = await supabase.rpc('submit_upi_payment', {
+        p_payment_id: payment.id,
+        p_utr_number: trimmedUtr,
+        p_payment_method: selectedMethod,
+      });
+
+      if (rpcErr) throw rpcErr;
+
+      setShowUtrModal(false);
+      setUtrInput('');
+      Alert.alert(
+        'Payment Submitted',
+        `Your payment of ₹${payment.amount?.toLocaleString('en-IN')} has been submitted with reference ${trimmedUtr} and is under review by the property owner.`,
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              navigation.navigate('PaymentSuccess', {
+                amount: payment.amount,
+                method: selectedMethod,
+                txnId: 'UPI-' + trimmedUtr,
+                paidAt: now,
+              });
+            },
+          },
+        ]
+      );
+    } catch (err) {
+      Alert.alert('Submission Error', err.message || 'Could not record UPI payment reference.');
+    } finally {
+      setSubmittingUtr(false);
+    }
+  };
 
   if (!user) return null;
 
@@ -1108,6 +1191,79 @@ export default function RentPaymentScreen({ navigation }) {
             )}
           />
         </View>
+      </Modal>
+
+      {/* UPI UTR Verification Modal */}
+      <Modal
+        visible={showUtrModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => {
+          if (!submittingUtr) setShowUtrModal(false);
+        }}
+      >
+        <Pressable 
+          style={styles.modalBackdrop} 
+          onPress={() => {
+            if (!submittingUtr) setShowUtrModal(false);
+          }}
+        >
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.modalKeyboardAvoiding}
+          >
+            <Pressable style={styles.rzpContainer} onPress={(e) => e.stopPropagation()}>
+              {/* Header */}
+              <View style={styles.rzpHeader}>
+                <View>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Text style={{ fontSize: 18 }}>📱</Text>
+                    <Text style={styles.rzpBrandName}>Confirm UPI Payment</Text>
+                  </View>
+                  <Text style={styles.rzpMerchantName}>Enter the 12-digit UTR / Reference number from your app</Text>
+                </View>
+                <TouchableOpacity 
+                  style={styles.rzpCloseBtn}
+                  onPress={() => {
+                    if (!submittingUtr) setShowUtrModal(false);
+                  }}
+                >
+                  <MaterialIcons name="close" size={20} color="#999" />
+                </TouchableOpacity>
+              </View>
+
+              <View style={{ paddingVertical: 16 }}>
+                <Text style={styles.rzpInputLabel}>UPI Reference / UTR Number</Text>
+                <TextInput
+                  style={[styles.rzpInput, { marginTop: 6 }]}
+                  placeholder="e.g. 423589123456"
+                  placeholderTextColor="#999"
+                  value={utrInput}
+                  onChangeText={setUtrInput}
+                  keyboardType="numeric"
+                  maxLength={22}
+                  autoFocus={true}
+                />
+                <Text style={{ fontFamily: fonts.interRegular, fontSize: 11, color: '#666', marginTop: 6 }}>
+                  You can find the 12-digit UTR in your Google Pay, PhonePe, or Paytm payment history.
+                </Text>
+              </View>
+
+              <TouchableOpacity
+                style={[
+                  styles.rzpPayBtn,
+                  (submittingUtr || utrInput.trim().length < 6) && { opacity: 0.5 }
+                ]}
+                onPress={handleUtrSubmit}
+                disabled={submittingUtr || utrInput.trim().length < 6}
+              >
+                <Text style={styles.rzpPayBtnText}>
+                  {submittingUtr ? 'Submitting...' : 'Submit for Verification'}
+                </Text>
+              </TouchableOpacity>
+            </Pressable>
+          </KeyboardAvoidingView>
+        </Pressable>
       </Modal>
     </View>
   );

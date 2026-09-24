@@ -1,125 +1,111 @@
 # 🏛️ Tenura
 
 <p align="center">
-  <b>Precision-crafted property management for modern landlords and tenants.</b><br>
-  A high-fidelity, double-sided mobile application with automated rent collection, DocuSign e-signatures, real-time maintenance workflows, and bank-grade backend security.
+  <img src="./assets/icon.png" alt="Tenura Logo" width="100" height="100" style="border-radius: 20px;" />
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/React%20Native-0.81-61DAFB?logo=react&logoColor=black&style=for-the-badge" alt="React Native">
-  <img src="https://img.shields.io/badge/Expo-54-000020?logo=expo&logoColor=white&style=for-the-badge" alt="Expo">
-  <img src="https://img.shields.io/badge/Supabase-Backend-3ECF8E?logo=supabase&logoColor=white&style=for-the-badge" alt="Supabase">
-  <img src="https://img.shields.io/badge/Database-PostgreSQL-4169E1?logo=postgresql&logoColor=white&style=for-the-badge" alt="Postgres">
-  <img src="https://img.shields.io/badge/Payments-Razorpay-02042B?logo=razorpay&logoColor=3395FF&style=for-the-badge" alt="Razorpay">
-  <img src="https://img.shields.io/badge/E--Signature-DocuSign-FFCD00?logo=docusign&logoColor=black&style=for-the-badge" alt="DocuSign">
+  <b>Modern estate and property management for landlords and tenants.</b><br>
+  A high-fidelity mobile app with automated rent collection, DocuSign digital leases, real-time maintenance workflows, and bank-grade backend security.
+</p>
+
+<p align="center">
+  <a href="https://reactnative.dev/"><img src="https://img.shields.io/badge/React_Native-0.85-20232A?style=for-the-badge&logo=react&logoColor=61DAFB" alt="React Native"></a>
+  <a href="https://expo.dev/"><img src="https://img.shields.io/badge/Expo_SDK-56-000020?style=for-the-badge&logo=expo&logoColor=white" alt="Expo SDK 56"></a>
+  <a href="https://react.dev/"><img src="https://img.shields.io/badge/React-19.2-20232A?style=for-the-badge&logo=react&logoColor=61DAFB" alt="React 19"></a>
+  <a href="https://supabase.com/"><img src="https://img.shields.io/badge/Supabase-Backend-181818?style=for-the-badge&logo=supabase&logoColor=3ECF8E" alt="Supabase"></a>
+  <a href="https://www.postgresql.org/"><img src="https://img.shields.io/badge/PostgreSQL-15-316192?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL"></a>
+  <a href="https://razorpay.com/"><img src="https://img.shields.io/badge/Payments-Razorpay%20%7C%20UPI-02042B?style=for-the-badge&logo=razorpay&logoColor=3395FF" alt="Razorpay & UPI"></a>
+  <a href="https://www.docusign.com/"><img src="https://img.shields.io/badge/E--Sign-DocuSign%20v2.1-FFCD00?style=for-the-badge&logo=docusign&logoColor=black" alt="DocuSign"></a>
+  <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-007ACC?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript"></a>
 </p>
 
 ---
 
-## 💎 Design System & Double-Sided Experience
+## ⚡ Tech Stack at a Glance
 
-Tenura delivers a role-based, dual-aesthetic experience tailored to each user:
-* **Landlord Mode (Owner):** Sleek, high-contrast dark space violet theme with glowing neon cyan accents.
-* **Tenant Mode:** Clean, warm light cream theme with soft coral and rose highlights.
+| Layer | Technology | Purpose in Tenura |
+| :--- | :--- | :--- |
+| **Mobile Core** | <img src="https://cdn.simpleicons.org/react/61DAFB" width="16" height="16" /> **React Native 0.85** | Fast, cross-platform native iOS & Android framework |
+| **Tooling & Runtime** | <img src="https://cdn.simpleicons.org/expo/000000" width="16" height="16" /> **Expo SDK 56** | Hermes Bytecode Engine, native APIs, icons, and fonts |
+| **Backend Platform** | <img src="https://cdn.simpleicons.org/supabase/3ECF8E" width="16" height="16" /> **Supabase** | GoTrue Auth, Realtime WebSockets, Storage, and Deno Edge Functions |
+| **Database** | <img src="https://cdn.simpleicons.org/postgresql/4169E1" width="16" height="16" /> **PostgreSQL 15** | Row Level Security (RLS), sequence generators, automated triggers |
+| **Payment Gateway** | <img src="https://cdn.simpleicons.org/razorpay/3395FF" width="16" height="16" /> **Razorpay & Direct UPI** | Cards, NetBanking & deep-linking for Google Pay, PhonePe, Paytm |
+| **Digital Contracts** | <img src="https://cdn.simpleicons.org/docusign/FFCD00" width="16" height="16" /> **DocuSign REST API v2.1** | JWT Bearer OAuth grant, digital lease dispatch, HMAC webhooks |
+| **PDF Engine** | <img src="https://cdn.simpleicons.org/adobeacrobatreader/EC1C24" width="16" height="16" /> **expo-print & expo-sharing** | Instant on-device PDF rent receipt and lease agreement generator |
+| **Realtime Sync** | <img src="https://cdn.simpleicons.org/websocket/FFFFFF" width="16" height="16" /> **Supabase Realtime** | Live messaging channel for maintenance tickets |
+| **Language** | <img src="https://cdn.simpleicons.org/typescript/3178C6" width="16" height="16" /> **TypeScript & JavaScript** | Typed hooks, serverless edge functions, and UI components |
 
-### 🎭 Navigational Architecture
+---
 
-Authentication status and user role in Supabase dynamically gate navigation:
+## 💡 What is Tenura?
+
+Tenura replaces paper agreements, payment screenshots, and disorganized chat groups with an all-in-one mobile platform built for two distinct user roles:
+
+1. **For Landlords (Owners):** Oversee multiple properties, monitor revenue in Indian denominations (₹ Lakhs & Crores), onboard tenants with automatic email matching, dispatch DocuSign digital leases, and assign maintenance contractors.
+2. **For Residents (Tenants):** View active lease terms, pay rent with zero hassle via Direct UPI or Razorpay, download instant PDF receipts, report maintenance issues with photos, and chat in real-time with management.
+
+---
+
+## 📱 Navigation & User Flow
+
+Authentication status and role gate access automatically upon login:
 
 ```mermaid
-graph TD
-    User([App User]) -->|Sign In / Sign Up| Auth{Auth Role Gate}
-    Auth -->|Owner Role| OwnerFlow[Landlord Portal]
-    Auth -->|Tenant Role| TenantFlow[Tenant Portal]
+flowchart TD
+    User([User Opens App]) --> AuthCheck{Logged In?}
+    AuthCheck -- No --> Auth[Login / Sign Up]
+    AuthCheck -- Yes --> RoleCheck{Role Assigned?}
     
-    subgraph OwnerFlow [Landlord Flow]
-        OwnerDash[Portfolio Dashboard]
-        Properties[Property & Unit Setup]
-        Tenants[Tenant Onboarding & Leases]
-        DocuSignSend[DocuSign E-Signature Dispatch]
-        FinanceLedger[Financial Transactions Ledger]
-        OwnerIssues[Maintenance Tracker & Vendor Dispatch]
-    end
+    RoleCheck -- No --> SelectRole[Choose Role: Landlord or Tenant]
+    RoleCheck -- Yes --> Gate{User Role}
+    SelectRole --> Gate
     
-    subgraph TenantFlow [Tenant Flow]
-        TenantDash[Lease & Due Status]
-        RentPay[Razorpay Checkout & Direct UPI]
-        PDFGen[On-Device PDF Receipt Generator]
-        IssueSubmit[Photo Maintenance Request]
-        TenantChat[Real-Time Ticket Chat]
-    end
-    
-    OwnerIssues <-->|Supabase Realtime WebSockets| TenantChat
-    
-    subgraph Supabase [Backend Database, Storage & Functions]
-        DB[(PostgreSQL Database)]
-        Storage[(Scoped Storage Buckets)]
-        EdgeFunctions[[Supabase Edge Functions]]
-        RLS{Row Level Security}
-        DB --- RLS
-    end
-    
-    OwnerFlow & TenantFlow -->|Secured API Requests| RLS
-    RentPay -->|Order Creation| EdgeFunctions
-    DocuSignSend -->|Envelope Creation| EdgeFunctions
+    Gate -- Owner --> OwnerPortal["🏛️ Landlord Portal (6 Tabs)\nPortfolio • Residents • Finance • Issues • Community • Menu"]
+    Gate -- Tenant --> TenantPortal["🏡 Resident Portal (5 Tabs)\nDashboard • Payments • Maintenance • Community • Menu"]
 ```
 
 ---
 
-## ⚡ Features Matrix
+## ✨ Features
 
-| Feature | Landlord Portal (Owner) | Tenant Portal |
-| :--- | :--- | :--- |
-| **Portfolio Dashboard** | Occupancy metrics, rent collected vs. overdue, active leases | Active lease terms, days until rent due, landlord contact card |
-| **Rent Collection & Payments** | Automated financial transactions ledger, payment status log | **Razorpay** Web Checkout (Cards/NetBanking/UPI) + **Direct UPI** intent flow |
-| **Payment Verification** | Verified transaction history with 12-digit UTR review | Instant on-device PDF rent receipt generation and native sharing |
-| **DocuSign E-Signatures** | One-click lease dispatch to DocuSign; automatic status sync | Review and sign digital lease agreements directly via DocuSign |
-| **Maintenance & Repairs** | Sequence-based tickets (`CASE-5000+`), priority badges, vendor assignment | Multi-step photo ticket submission with camera/gallery upload |
-| **Realtime Messaging** | Direct WebSockets messaging per maintenance ticket | Realtime ticket chat with landlord and status indicators |
-| **Community & Alerts** | Broadcast building announcements and emergency alerts | View property notices, building alerts, and amenities |
-| **Storage Vault** | Property images, encrypted leases, avatar uploads | Attached maintenance defect photos, downloaded receipts |
+### 🏛️ Landlord / Owner Experience
+* **Portfolio Dashboard:** High-level metrics showing occupancy rate, collected rent, and overdue balances.
+* **Smart Tenant Onboarding:** Enter tenant details and lease terms; Tenura automatically links their account when they sign up with that email.
+* **DocuSign Lease Dispatch:** Compile digital leases to PDF and send them to tenants for signature via DocuSign in one click.
+* **Financial Ledger:** Real-time income and expense tracking automatically updated whenever a payment is confirmed.
+* **Maintenance Tracker:** Sequence-generated ticket IDs (`CASE-5000+`) with priority flags and contractor dispatch.
+* **Building Community:** Post public notices, manage office contact cards, and showcase building amenities.
 
----
-
-## 🛡️ Backend Engineering & Security Hardening
-
-The backend is built on Supabase (PostgreSQL 15, Auth, Storage, and Edge Functions) and hardened with bank-grade security:
-
-### 1. Database Security & Permissions
-* **`auth.users` Lockdown**: Revoked all direct access from `anon` and `authenticated` roles to eliminate user enumeration or unauthorized introspection. All user profile data is accessed strictly through `public.users`.
-* **Tamper-Proof Payment & Lease RLS**: Dropped permissive client-side update policies. Tenants cannot tamper with rent amounts or update payment statuses directly. All rent status transitions are processed via server-side Edge Functions or stored procedures.
-* **Storage Bucket Hardening**: The `leases` bucket is configured strictly **private**. All storage buckets (`leases`, `maintenance-photos`, `avatars`, `properties`) enforce granular RLS policies matching authenticated user IDs.
-
-### 2. Data Integrity & Automated Triggers
-* **Automatic Profile Provisioning**: A database trigger (`on_auth_user_created`) automatically populates `public.users` with the user's name and email upon auth sign-up.
-* **Automated Financial Ledger**: A database trigger (`trg_payment_paid_transaction`) automatically inserts a balanced record into the `transactions` ledger whenever a payment is confirmed as `paid`.
-* **Collision-Proof Maintenance IDs**: Replaced volatile client counters with a database sequence (`maintenance_case_seq` starting at `CASE-5000`) and enforced a `UNIQUE` constraint on `case_number`.
-* **Case-Insensitive Tenant Auto-Link**: Tenant invitations and onboarding normalize emails with `lower(email)` and enforce strict upsert ordering to prevent foreign key violations (`23503`).
-
-### 3. Supabase Edge Functions (Deno / TypeScript)
-* **`razorpay`**: Validates the actual rent amount from the database row prior to order creation (preventing client-side amount manipulation). Includes client IP/user rate limiting and automatic expired TTL purging against `rate_limits`.
-* **`send-for-signature`**: Integrates with DocuSign e-Signature REST API v2.1 with pre-flight checks blocking duplicate envelope creation (`409 Conflict`).
-* **`docusign-webhook`**: Receives DocuSign Connect webhook events with HMAC-SHA256 signature verification, automatically transitioning leases to `signed` upon completion.
-
-### 4. Supabase Realtime Publication
-* Full replication (`REPLICA IDENTITY FULL`) enabled in `supabase_realtime` across:
-  - `issue_messages` (chat messages)
-  - `maintenance_requests` (tickets)
-  - `payments` (rent payments)
-  - `announcements` & `alerts` (community notices)
+### 🏡 Resident / Tenant Experience
+* **Rent Payments:** Pay using your preferred method:
+  * **Direct UPI Intent:** One-tap launch into Google Pay, PhonePe, or Paytm.
+  * **Razorpay Checkout:** Credit/Debit Cards, NetBanking, and Wallets.
+  * **12-Digit UTR Input:** Direct bank transfer verification.
+* **Instant PDF Receipts:** On-device receipt compilation (`expo-print`) with native sharing (`expo-sharing`).
+* **Photo Maintenance Requests:** Snap and upload photos with category tags and priority ratings.
+* **Live Ticket Chat:** WebSocket-powered chat with landlords on open maintenance tickets.
+* **Automated Due Date Reminders:** 9:00 AM local notification on rent due dates via `expo-notifications`.
 
 ---
 
-## 🛠️ Tech Stack
+## 🎨 Design System: "The Precision Atelier"
 
-* **Frontend Framework:** React Native 0.81 with Expo (SDK 54)
-* **JS Engine:** Hermes Bytecode Engine
-* **Navigation:** React Navigation 7 (Native Stacks + Custom Bottom Tab Bars)
-* **Backend Platform:** Supabase (PostgreSQL 15, Deno Edge Functions, GoTrue Auth, Storage)
-* **Payment Gateways:** Razorpay Standard Web Checkout + Direct UPI Intent (GPay, PhonePe, Paytm)
-* **Digital Signatures:** DocuSign e-Signature REST API v2.1 with Connect Webhooks
-* **Document Compilation:** `expo-print` (HTML to PDF) and `expo-sharing` (native file sharing)
-* **Realtime Sync:** Supabase Realtime Channels (WebSockets)
+Tenura features a dual-theme aesthetic tailored for day-to-day usability:
+
+* **Atelier Light (Default):** Warm ivory surfaces (`#FCFBFA`), soft coral accents (`#FC805C`), and mint green positive signals (`#27C485`).
+* **Cyber Dark:** Deep space violet surfaces (`#0C0B14`), electric cyan accents (`#00E5FF`), and neon highlights.
+* **Typography:** **Manrope** for numbers and bold headlines; **Inter** for readable metadata and forms.
+
+---
+
+## 🔒 Security Highlights
+
+* **Zero-Trust Payments:** Payment amounts are validated directly against PostgreSQL database rows in Edge Functions before orders are created (no client-side tampering).
+* **Locked-Down User Profiles:** Direct queries to `auth.users` are revoked; profile data is synced securely to `public.users` via database triggers.
+* **HMAC-SHA256 Webhooks:** Inbound DocuSign Connect events require cryptographic signature verification before updating contract statuses.
+* **Automated Accounting Triggers:** PostgreSQL trigger `trg_payment_paid_transaction` automatically records confirmed payments into the ledger.
+* **Rate-Limiting Defense:** Client buttons use a 7-click/min threshold (`useRateLimit`), backed by a PostgreSQL `rate_limits` table in Edge Functions.
 
 ---
 
@@ -127,60 +113,56 @@ The backend is built on Supabase (PostgreSQL 15, Auth, Storage, and Edge Functio
 
 ```
 Tenura/
-├── assets/                       – Static icons, logos, and illustration assets
+├── assets/                  # App icon, splash screens, and vector assets
 ├── src/
-│   ├── components/               – Atoms, molecules, buttons, MetricCards, headers
-│   ├── context/                  – AuthContext (role state, tenant auto-link)
-│   ├── lib/                      – Supabase client, PDF receipt compiler, payment helpers
-│   ├── navigation/               – AppNavigator, OwnerTabNavigator, TenantTabNavigator
+│   ├── components/          # MetricCard, PrimaryButton, RateLimitedButton, ScreenHeader
+│   ├── context/             # AuthContext (role gating), ThemeContext (dark/light)
+│   ├── hooks/               # useRateLimit hook
+│   ├── lib/                 # Supabase client, notifications, PDF templates
+│   ├── navigation/          # RootNavigator, OwnerNavigator (6 tabs), TenantNavigator (5 tabs)
 │   ├── screens/
-│   │   ├── auth/                 – Login, Register, RoleSelection screens
-│   │   ├── owner/                – Dashboard, Properties, Tenants, Finance, Maintenance
-│   │   ├── tenant/               – TenantDashboard, RentPayment, MaintenanceRequest
-│   │   └── shared/               – IssueMessagesScreen, CommunityAnnouncements
-│   └── theme/                    – Color palettes, typography, spacing, elevations
+│   │   ├── auth/            # Login, SignUp, RoleSelection
+│   │   ├── owner/           # Dashboard, Properties, Finance, Issues, Community, Leases
+│   │   ├── tenant/          # TenantDashboard, RentPayment, MaintenanceRequest, Agreement
+│   │   └── shared/          # ProfileScreen, IssueMessagesScreen (Chat)
+│   └── theme/               # Color tokens (Light & Dark), Manrope/Inter typography
 └── supabase/
-    ├── functions/                – Deno Edge Functions
-    │   ├── docusign-webhook/     – HMAC-verified webhook for DocuSign status updates
-    │   ├── razorpay/             – Server-side order creation & verification with rate limiting
-    │   └── send-for-signature/   – Lease agreement envelope dispatcher
-    └── migrations/               – 25 incremental PostgreSQL migrations & RLS policies
+    ├── functions/           # Deno Edge Functions (razorpay, send-for-signature, docusign-webhook)
+    └── migrations/          # 25+ SQL migrations with RLS policies, sequences & triggers
 ```
 
 ---
 
 ## 🚀 Getting Started
 
-### Prerequisites
-* [Node.js](https://nodejs.org/) (v18 or higher recommended)
-* [Expo CLI](https://docs.expo.dev/get-started/installation/) (`npm install -g expo-cli` or via `npx`)
-* [Supabase CLI](https://supabase.com/docs/guides/cli) (for Edge Function deployment and migrations)
-* iOS Simulator / Android Emulator or the Expo Go mobile app
+### 1. Prerequisites
+* [Node.js](https://nodejs.org/) (v18+)
+* [Expo Go](https://expo.dev/go) app on your mobile device (or iOS Simulator / Android Emulator)
+* A [Supabase](https://supabase.com/) project
 
-### 1. Clone the Repository
+### 2. Installation
 ```bash
+# Clone repository
 git clone https://github.com/Rudvik-17/Tenura.git
 cd Tenura
-git checkout Bug-fix
-```
 
-### 2. Install Dependencies
-```bash
+# Install dependencies
 npm install
 ```
 
-### 3. Configure Environment Variables
-Create a local `.env` file based on the provided [`.env.example`](./.env.example):
+### 3. Environment Setup
+Create a `.env` file in the root directory:
 ```bash
 cp .env.example .env
 ```
-Fill in your credentials:
+
+Add your credentials:
 ```env
-EXPO_PUBLIC_SUPABASE_URL=https://your-project-ref.supabase.co
-EXPO_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
+EXPO_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+EXPO_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 EXPO_PUBLIC_RAZORPAY_KEY_ID=rzp_test_your_key_id
 
-# DocuSign (Optional for e-signature testing)
+# Optional: DocuSign (for e-signature flow)
 DOCUSIGN_INTEGRATION_KEY=your-integration-key
 DOCUSIGN_SECRET_KEY=your-secret-key
 DOCUSIGN_ACCOUNT_ID=your-account-id
@@ -189,54 +171,34 @@ DOCUSIGN_USER_ID=your-user-id
 DOCUSIGN_ACCESS_TOKEN=your-access-token
 ```
 
-### 4. Database Setup & Migrations
-Link your local Supabase project and apply migrations:
+### 4. Run the App
 ```bash
-npx supabase link --project-ref your-project-ref
-npx supabase db push
+# Start Expo development server
+npm start
 ```
-
-### 5. Deploy Edge Functions
-```bash
-npx supabase functions deploy razorpay --no-verify-jwt
-npx supabase functions deploy send-for-signature --no-verify-jwt
-npx supabase functions deploy docusign-webhook --no-verify-jwt
-```
-
-### 6. Start the App
-```bash
-npx expo start
-```
-* Press `i` to open in iOS Simulator.
-* Press `a` to open in Android Emulator.
-* Scan the QR code with Expo Go to run on a physical device.
+* Press `i` to open in iOS Simulator
+* Press `a` to open in Android Emulator
+* Scan the QR code using the **Expo Go** app on your physical device
 
 ---
 
-## 🧪 Verification & Build Status
+## 📋 Environment Variables Reference
 
-* **Hermes Bytecode Compilation**:
-  - iOS Hermes Bundle: **1,153 modules** compiled with 0 errors.
-  - Android Hermes Bundle: **1,236 modules** compiled with 0 errors.
-* **Automated Test Suite**:
-  - Database security & RLS policies: **PASS**
-  - Edge Functions & DocuSign webhook HMAC verification: **PASS**
-  - Triggers, sequences & ledger auto-sync: **PASS**
-  - Realtime publications & storage policies: **PASS**
+| Key | Required | Purpose |
+| :--- | :---: | :--- |
+| `EXPO_PUBLIC_SUPABASE_URL` | **Yes** | Supabase project API URL |
+| `EXPO_PUBLIC_SUPABASE_ANON_KEY` | **Yes** | Client anon key for safe client queries |
+| `EXPO_PUBLIC_RAZORPAY_KEY_ID` | Optional | Razorpay public test/live key (simulator fallback included) |
+| `DOCUSIGN_INTEGRATION_KEY` | Optional | DocuSign integration key for JWT grant |
+| `DOCUSIGN_ACCOUNT_ID` | Optional | DocuSign account identifier |
+| `DOCUSIGN_BASE_URI` | Optional | DocuSign base URI (`https://demo.docusign.net`) |
 
 ---
 
-## 🗺️ Roadmap
+## 📄 License
 
-- [x] Dual-theme High Contrast UI (Space Violet Dark Mode & Warm Cream Light Mode)
-- [x] Double-sided Role Gate & Navigation (Landlord vs. Tenant)
-- [x] On-Device PDF Rent Receipt Generation & Native Sharing
-- [x] Real-time WebSockets Chat for Maintenance Tickets
-- [x] **Razorpay Standard Web Checkout** & **Direct UPI Flow** (with 12-digit UTR confirmation)
-- [x] **DocuSign e-Signature Integration** with HMAC Webhook & Duplicate Envelope Guard
-- [x] Collision-Proof Maintenance Sequence (`maintenance_case_seq`) & Photo Attachments
-- [x] Bank-Grade Security Hardening (RLS, `auth.users` lockdown, rate limiting)
-- [x] Automated Accounting Ledger Triggers (`trg_payment_paid_transaction`)
-- [ ] Expo Push Notifications for rent reminders and maintenance alerts
-- [ ] Multi-currency & international payment gateway support
+This project is licensed under the **MIT License**.
 
+<p align="center">
+  Crafted with precision by <a href="https://github.com/Rudvik-17">Rudvik-17</a>.
+</p>

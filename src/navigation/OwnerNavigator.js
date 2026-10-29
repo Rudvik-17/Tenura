@@ -1,5 +1,5 @@
 import React from 'react';
-import { Platform } from 'react-native';
+import { Platform, View } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -16,6 +16,8 @@ import TenantOnboardingScreen from '../screens/owner/TenantOnboardingScreen';
 import TenantDetailScreen from '../screens/owner/TenantDetailScreen';
 import FinanceOverviewScreen from '../screens/owner/FinanceOverviewScreen';
 import RentCollectionScreen from '../screens/owner/RentCollectionScreen';
+import RecentActivityScreen from '../screens/owner/RecentActivityScreen';
+import SecurityDepositScreen from '../screens/owner/SecurityDepositScreen';
 import ResidentIssuesScreen from '../screens/owner/ResidentIssuesScreen';
 import IssueMessagesScreen from '../screens/shared/IssueMessagesScreen';
 
@@ -26,13 +28,12 @@ import OfficeProfileScreen from '../screens/owner/OfficeProfileScreen';
 import AnnouncementsScreen from '../screens/owner/AnnouncementsScreen';
 import MessagesAlertsScreen from '../screens/owner/MessagesAlertsScreen';
 import ShipPlayScreen from '../screens/owner/ShipPlayScreen';
+import AppSettingsScreen from '../screens/owner/AppSettingsScreen';
 
 const Tab = createBottomTabNavigator();
 const PortfolioStack = createStackNavigator();
 const ResidentsStack = createStackNavigator();
 const FinanceStack = createStackNavigator();
-const IssuesStack = createStackNavigator();
-const CommunityStack = createStackNavigator();
 const MenuStack = createStackNavigator();
 
 function PortfolioStackNav() {
@@ -61,28 +62,9 @@ function FinanceStackNav() {
     <FinanceStack.Navigator screenOptions={{ headerShown: false }}>
       <FinanceStack.Screen name="FinanceOverview" component={FinanceOverviewScreen} />
       <FinanceStack.Screen name="RentCollection" component={RentCollectionScreen} />
+      <FinanceStack.Screen name="RecentActivity" component={RecentActivityScreen} />
+      <FinanceStack.Screen name="SecurityDeposit" component={SecurityDepositScreen} />
     </FinanceStack.Navigator>
-  );
-}
-
-function IssuesStackNav() {
-  return (
-    <IssuesStack.Navigator screenOptions={{ headerShown: false }}>
-      <IssuesStack.Screen name="ResidentIssues" component={ResidentIssuesScreen} />
-      <IssuesStack.Screen name="IssueMessages" component={IssueMessagesScreen} />
-    </IssuesStack.Navigator>
-  );
-}
-
-function CommunityStackNav() {
-  return (
-    <CommunityStack.Navigator screenOptions={{ headerShown: false }}>
-      <CommunityStack.Screen name="CommunityMain" component={CommunityScreen} />
-      <CommunityStack.Screen name="OfficeProfile" component={OfficeProfileScreen} />
-      <CommunityStack.Screen name="Announcements" component={AnnouncementsScreen} />
-      <CommunityStack.Screen name="MessagesAlerts" component={MessagesAlertsScreen} />
-      <CommunityStack.Screen name="ShipPlay" component={ShipPlayScreen} />
-    </CommunityStack.Navigator>
   );
 }
 
@@ -90,29 +72,37 @@ function MenuStackNav() {
   return (
     <MenuStack.Navigator screenOptions={{ headerShown: false }}>
       <MenuStack.Screen name="MenuMain" component={MenuScreen} />
+      <MenuStack.Screen name="ResidentIssues" component={ResidentIssuesScreen} />
+      <MenuStack.Screen name="IssueMessages" component={IssueMessagesScreen} />
+      <MenuStack.Screen name="CommunityMain" component={CommunityScreen} />
+      <MenuStack.Screen name="OfficeProfile" component={OfficeProfileScreen} />
+      <MenuStack.Screen name="Announcements" component={AnnouncementsScreen} />
+      <MenuStack.Screen name="MessagesAlerts" component={MessagesAlertsScreen} />
+      <MenuStack.Screen name="ShipPlay" component={ShipPlayScreen} />
       <MenuStack.Screen name="LeaseDocuments" component={LeaseDocumentsScreen} />
+      <MenuStack.Screen name="AppSettings" component={AppSettingsScreen} />
     </MenuStack.Navigator>
   );
 }
 
 
 export default function OwnerNavigator() {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
 
   const tabBarStyle = {
-    backgroundColor: colors.surface,
+    backgroundColor: colors.surfaceContainerLowest,
     borderTopWidth: 1,
-    borderTopColor: colors.surfaceContainerHigh,
-    elevation: 8,
-    height: Platform.OS === 'ios' ? (insets.bottom > 0 ? 58 + insets.bottom : 64) : 64,
-    paddingBottom: Platform.OS === 'ios' ? (insets.bottom > 0 ? insets.bottom - 4 : 8) : 8,
+    borderTopColor: colors.outlineVariant,
+    elevation: 12,
+    height: Platform.OS === 'ios' ? (insets.bottom > 0 ? 64 + insets.bottom : 70) : 70,
+    paddingBottom: Platform.OS === 'ios' ? (insets.bottom > 0 ? insets.bottom : 8) : 8,
     paddingTop: 8,
-    paddingHorizontal: 12,
+    paddingHorizontal: 8,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: isDark ? 0.3 : 0.05,
+    shadowRadius: 8,
   };
 
   return (
@@ -121,30 +111,46 @@ export default function OwnerNavigator() {
         headerShown: false,
         tabBarStyle: tabBarStyle,
         tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.outline,
+        tabBarInactiveTintColor: colors.onSurfaceVariant,
         tabBarLabelStyle: {
-          fontFamily: fonts.interMedium,
-          fontSize: 10,
-          letterSpacing: -0.2,
+          fontFamily: fonts.interSemiBold,
+          fontSize: 11,
+          letterSpacing: -0.1,
+          marginTop: -2,
         },
-        tabBarIcon: ({ color, size }) => {
+        tabBarIcon: ({ focused, color }) => {
           const icons = {
             Portfolio: 'domain',
             Residents: 'groups',
             Finance: 'payments',
-            Issues: 'report-problem',
-            Community: 'business',
             Menu: 'menu',
           };
-          return <MaterialIcons name={icons[route.name]} size={size} color={color} />;
+          return (
+            <View style={{ width: 48, height: 28, alignItems: 'center', justifyContent: 'center' }}>
+              {focused && (
+                <View
+                  style={{
+                    position: 'absolute',
+                    width: 48,
+                    height: 28,
+                    borderRadius: 14,
+                    backgroundColor: isDark ? 'rgba(129, 140, 248, 0.18)' : 'rgba(79, 70, 229, 0.12)',
+                  }}
+                />
+              )}
+              <MaterialIcons
+                name={icons[route.name]}
+                size={22}
+                color={color}
+              />
+            </View>
+          );
         },
       })}
     >
       <Tab.Screen name="Portfolio" component={PortfolioStackNav} />
       <Tab.Screen name="Residents" component={ResidentsStackNav} />
       <Tab.Screen name="Finance" component={FinanceStackNav} />
-      <Tab.Screen name="Issues" component={IssuesStackNav} />
-      <Tab.Screen name="Community" component={CommunityStackNav} />
       <Tab.Screen name="Menu" component={MenuStackNav} />
     </Tab.Navigator>
   );

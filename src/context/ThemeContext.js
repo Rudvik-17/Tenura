@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import { useColorScheme } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { lightColors, darkColors } from '../theme/colors';
@@ -16,10 +16,10 @@ export function ThemeProvider({ children }) {
     async function loadStoredTheme() {
       try {
         const stored = await AsyncStorage.getItem(THEME_KEY);
-        if (stored === 'light' || stored === 'dark') {
+        if (stored === 'light' || stored === 'dark' || stored === 'system') {
           setThemeState(stored);
         } else if (systemScheme === 'dark') {
-          setThemeState('dark');
+          setThemeState('system');
         }
       } catch (err) {
         console.error('Failed to load theme preference:', err);
@@ -31,7 +31,7 @@ export function ThemeProvider({ children }) {
   }, [systemScheme]);
 
   const setTheme = async (newTheme) => {
-    if (newTheme !== 'light' && newTheme !== 'dark') return;
+    if (newTheme !== 'light' && newTheme !== 'dark' && newTheme !== 'system') return;
     try {
       setThemeState(newTheme);
       await AsyncStorage.setItem(THEME_KEY, newTheme);
@@ -40,15 +40,19 @@ export function ThemeProvider({ children }) {
     }
   };
 
+  const isDark = theme === 'dark' || (theme === 'system' && systemScheme === 'dark');
+
   const toggleTheme = () => {
-    const nextTheme = theme === 'light' ? 'dark' : 'light';
+    const nextTheme = isDark ? 'light' : 'dark';
     setTheme(nextTheme);
   };
 
-  const colors = theme === 'dark' ? darkColors : lightColors;
+  const colors = useMemo(() => {
+    return isDark ? darkColors : lightColors;
+  }, [isDark]);
 
   return (
-    <ThemeContext.Provider value={{ theme, colors, setTheme, toggleTheme, loading }}>
+    <ThemeContext.Provider value={{ theme, isDark, colors, setTheme, toggleTheme, loading }}>
       {children}
     </ThemeContext.Provider>
   );

@@ -25,6 +25,7 @@ import ScreenHeader from '../../components/ScreenHeader';
 import StatusChip from '../../components/StatusChip';
 import PrimaryButton from '../../components/PrimaryButton';
 import { buildReceiptHTML } from '../../lib/receiptHTML';
+import { getTenantUtilityBills } from '../../lib/utilityBills';
 import { RateLimitedButton } from '../../components/RateLimitedButton';
 
 const METHOD_LABELS = {
@@ -50,6 +51,7 @@ export default function PaymentHistoryScreen({ navigation }) {
   const [refreshing, setRefreshing] = useState(false);
   const [tenantInfo, setTenantInfo] = useState(null);
   const [activeLease, setActiveLease] = useState(null);
+  const [utilityBills, setUtilityBills] = useState(null);
   const downloadingRef = useRef(new Set());
   const [downloadingIds, setDownloadingIds] = useState(new Set());
 
@@ -142,12 +144,20 @@ export default function PaymentHistoryScreen({ navigation }) {
 
     const tenant = tenantRows?.[0] ?? null;
     if (!tenant) {
+      const fallbackUtilities = await getTenantUtilityBills(`tenant-${user.id}`, '101', 'Bangalore');
+      setUtilityBills(fallbackUtilities);
       setPayments([]);
       setLoading(false);
       setRefreshing(false);
       return;
     }
     setTenantInfo(tenant);
+    const loadedUtilities = await getTenantUtilityBills(
+      tenant.id,
+      tenant.unit_number || '101',
+      'Bangalore'
+    );
+    setUtilityBills(loadedUtilities);
 
     // Get active lease & payments in parallel
     const [leaseRes, paymentsRes] = await Promise.all([
@@ -426,6 +436,87 @@ export default function PaymentHistoryScreen({ navigation }) {
               <Text style={styles.heroPrimaryBtnText}>
                 Make Payment
               </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* WATER & ELECTRICITY BILLS SECTION */}
+        <View style={styles.utilitiesCard}>
+          <View style={styles.utilitiesHeaderRow}>
+            <View>
+              <Text style={styles.utilitiesHeaderTitle}>Water & Electricity Bills</Text>
+              <Text style={styles.utilitiesHeaderSub}>
+                Direct UPI payment to respective utility department
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={styles.utilitiesViewAllBtn}
+              onPress={() => navigation.navigate('UtilityBills', { initialBillType: 'electricity' })}
+            >
+              <Text style={styles.utilitiesViewAllText}>Manage</Text>
+              <MaterialIcons name="arrow-forward" size={14} color={colors.primary} />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.utilityItemsRow}>
+            {/* Electricity Bill Option */}
+            <TouchableOpacity
+              style={styles.utilityOptionBox}
+              activeOpacity={0.8}
+              onPress={() => navigation.navigate('UtilityBills', { initialBillType: 'electricity' })}
+            >
+              <View style={styles.utilityOptionTop}>
+                <View style={[styles.utilityIconCircle, { backgroundColor: `${colors.primary}15` }]}>
+                  <MaterialIcons name="bolt" size={20} color={colors.primary} />
+                </View>
+                <StatusChip
+                  label={utilityBills?.electricity?.status === 'paid' ? 'Paid' : 'Due'}
+                  variant={utilityBills?.electricity?.status === 'paid' ? 'active' : 'pending'}
+                />
+              </View>
+              <Text style={styles.utilityOptionName}>Electricity Bill</Text>
+              <Text style={styles.utilityOptionDept} numberOfLines={1}>
+                {utilityBills?.electricity?.departmentShortName || 'BESCOM Electricity Dept'}
+              </Text>
+              <Text style={styles.utilityOptionAmount}>
+                ₹{Number(utilityBills?.electricity?.amount ?? 1450).toLocaleString('en-IN')}
+              </Text>
+              <View style={styles.utilityPayCta}>
+                <MaterialIcons name="smartphone" size={13} color={colors.onPrimary} />
+                <Text style={styles.utilityPayCtaText}>
+                  {utilityBills?.electricity?.status === 'paid' ? 'View / Pay Again' : 'Pay via UPI App'}
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            {/* Water Bill Option */}
+            <TouchableOpacity
+              style={styles.utilityOptionBox}
+              activeOpacity={0.8}
+              onPress={() => navigation.navigate('UtilityBills', { initialBillType: 'water' })}
+            >
+              <View style={styles.utilityOptionTop}>
+                <View style={[styles.utilityIconCircle, { backgroundColor: `${colors.tertiaryFixedDim}18` }]}>
+                  <MaterialIcons name="water-drop" size={18} color={colors.tertiaryFixedDim} />
+                </View>
+                <StatusChip
+                  label={utilityBills?.water?.status === 'paid' ? 'Paid' : 'Due'}
+                  variant={utilityBills?.water?.status === 'paid' ? 'active' : 'pending'}
+                />
+              </View>
+              <Text style={styles.utilityOptionName}>Water Bill</Text>
+              <Text style={styles.utilityOptionDept} numberOfLines={1}>
+                {utilityBills?.water?.departmentShortName || 'BWSSB Water Dept'}
+              </Text>
+              <Text style={styles.utilityOptionAmount}>
+                ₹{Number(utilityBills?.water?.amount ?? 580).toLocaleString('en-IN')}
+              </Text>
+              <View style={styles.utilityPayCta}>
+                <MaterialIcons name="smartphone" size={13} color={colors.onPrimary} />
+                <Text style={styles.utilityPayCtaText}>
+                  {utilityBills?.water?.status === 'paid' ? 'View / Pay Again' : 'Pay via UPI App'}
+                </Text>
+              </View>
             </TouchableOpacity>
           </View>
         </View>
@@ -957,6 +1048,106 @@ const getStyles = (colors, theme) => StyleSheet.create({
   },
 
   // OPTION MENU ITEMS
+  utilitiesCard: {
+    marginHorizontal: 16,
+    marginTop: 8,
+    backgroundColor: colors.surfaceContainerLowest,
+    borderRadius: 16,
+    padding: 16,
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+  },
+  utilitiesHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  utilitiesHeaderTitle: {
+    fontFamily: fonts.manropeBold,
+    fontSize: 16,
+    color: colors.onSurface,
+  },
+  utilitiesHeaderSub: {
+    fontFamily: fonts.interRegular,
+    fontSize: 12,
+    color: colors.onSurfaceVariant,
+    marginTop: 2,
+  },
+  utilitiesViewAllBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: `${colors.primary}12`,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 14,
+  },
+  utilitiesViewAllText: {
+    fontFamily: fonts.interSemiBold,
+    fontSize: 12,
+    color: colors.primary,
+  },
+  utilityItemsRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  utilityOptionBox: {
+    flex: 1,
+    backgroundColor: colors.surfaceContainerLow,
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: colors.outlineVariant,
+  },
+  utilityOptionTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  utilityIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  utilityOptionName: {
+    fontFamily: fonts.manropeBold,
+    fontSize: 14,
+    color: colors.onSurface,
+  },
+  utilityOptionDept: {
+    fontFamily: fonts.interRegular,
+    fontSize: 11,
+    color: colors.onSurfaceVariant,
+    marginTop: 2,
+    marginBottom: 8,
+  },
+  utilityOptionAmount: {
+    fontFamily: fonts.manropeBold,
+    fontSize: 18,
+    color: colors.onSurface,
+    marginBottom: 10,
+  },
+  utilityPayCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    backgroundColor: colors.primary,
+    borderRadius: 8,
+    paddingVertical: 8,
+  },
+  utilityPayCtaText: {
+    fontFamily: fonts.interSemiBold,
+    fontSize: 11,
+    color: colors.onPrimary,
+  },
   menuContainer: {
     marginHorizontal: 16,
     marginTop: 12,

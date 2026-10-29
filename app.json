@@ -14,7 +14,9 @@
           "gpay",
           "tez",
           "phonepe",
-          "paytm"
+          "paytm",
+          "paytmmp",
+          "bhim"
         ]
       }
     },

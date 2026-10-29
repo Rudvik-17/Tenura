@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../context/ThemeContext';
 import { fonts } from '../theme/typography';
 
-export default function ScreenHeader({ title, showBack, onBack, showBell, onBell, hideLogo }) {
+export default function ScreenHeader({ title, showBack, onBack, showBell, onBell, hideLogo, rightElement }) {
   const { colors } = useTheme();
   const styles = getStyles(colors);
   const insets = useSafeAreaInsets();
@@ -21,12 +21,14 @@ export default function ScreenHeader({ title, showBack, onBack, showBell, onBell
         ) : hideLogo ? (
           <View style={{ width: 40 }} />
         ) : (
-          <Text style={styles.logo}>TENURA</Text>
+          <Text style={styles.logo}>Tenura</Text>
         )}
       </View>
       {title ? <Text style={styles.title}>{title}</Text> : <View style={styles.spacer} />}
       <View style={styles.right}>
-        {showBell ? (
+        {rightElement ? (
+          rightElement
+        ) : showBell ? (
           <TouchableOpacity onPress={onBell} style={styles.bellBtn} activeOpacity={0.7}>
             <MaterialIcons name="notifications-none" size={22} color="#FFFFFF" />
           </TouchableOpacity>
@@ -45,6 +47,7 @@ ScreenHeader.propTypes = {
   showBell: PropTypes.bool,
   onBell: PropTypes.func,
   hideLogo: PropTypes.bool,
+  rightElement: PropTypes.node,
 };
 
 ScreenHeader.defaultProps = {
@@ -54,6 +57,7 @@ ScreenHeader.defaultProps = {
   showBell: false,
   onBell: null,
   hideLogo: false,
+  rightElement: null,
 };
 
 const getStyles = (colors) => StyleSheet.create({
@@ -64,6 +68,11 @@ const getStyles = (colors) => StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingBottom: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.10,
+    shadowRadius: 4,
+    elevation: 4,
   },
   left: {
     flex: 1,
@@ -90,9 +99,19 @@ const getStyles = (colors) => StyleSheet.create({
     flex: 2,
   },
   backBtn: {
-    padding: 4,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   bellBtn: {
-    padding: 4,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

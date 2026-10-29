@@ -23,6 +23,7 @@ const METHOD_LABELS = {
   gpay: 'Google Pay',
   phonepe: 'PhonePe',
   paytm: 'Paytm',
+  bhim: 'BHIM / UPI App',
 };
 
 export default function PaymentSuccessScreen({ navigation, route }) {
@@ -30,7 +31,16 @@ export default function PaymentSuccessScreen({ navigation, route }) {
   const styles = getStyles(colors);
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const { amount = 0, method = 'gpay', txnId = '', paidAt = new Date().toISOString() } = route?.params ?? {};
+  const {
+    amount = 0,
+    method = 'gpay',
+    txnId = '',
+    paidAt = new Date().toISOString(),
+    billType = null,
+    departmentName = null,
+    departmentUpiId = null,
+    consumerNumber = null,
+  } = route?.params ?? {};
 
   const [tenantInfo, setTenantInfo] = useState(null);
   const [downloading, setDownloading] = useState(false);
@@ -55,6 +65,10 @@ export default function PaymentSuccessScreen({ navigation, route }) {
   });
 
   const DETAILS = [
+    ...(billType ? [{ key: 'Bill Type', value: billType, highlight: true }] : []),
+    ...(departmentName ? [{ key: 'Department Paid', value: departmentName }] : []),
+    ...(departmentUpiId ? [{ key: 'Department UPI ID', value: departmentUpiId }] : []),
+    ...(consumerNumber ? [{ key: 'Consumer / RR No.', value: consumerNumber }] : []),
     { key: 'Amount', value: `₹${Number(amount).toLocaleString('en-IN')}`, highlight: true },
     { key: 'Payment Method', value: `UPI · ${METHOD_LABELS[method] ?? method}` },
     { key: 'Transaction Date', value: `${formattedDate} · ${formattedTime}` },
@@ -73,6 +87,10 @@ export default function PaymentSuccessScreen({ navigation, route }) {
         tenantName: tenantInfo?.full_name ?? 'Tenant',
         propertyName: tenantInfo?.properties?.name ?? 'Property',
         unitNumber: tenantInfo?.unit_number ?? '—',
+        paymentTitle: billType,
+        departmentName,
+        departmentUpiId,
+        consumerNumber,
       });
 
       const { uri } = await Print.printToFileAsync({ html, base64: false });
@@ -113,7 +131,9 @@ export default function PaymentSuccessScreen({ navigation, route }) {
 
         <Text style={styles.successTitle}>Payment Successful</Text>
         <Text style={styles.successSubtitle}>
-          Your rent payment has been received successfully via UPI.
+          {departmentName
+            ? `Your ${billType || 'utility bill'} payment has been sent directly to ${departmentName} via UPI.`
+            : 'Your rent payment has been received successfully via UPI.'}
         </Text>
 
         {/* Transaction details */}

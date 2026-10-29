@@ -1,5 +1,5 @@
 import React from 'react';
-import { Platform } from 'react-native';
+import { Platform, View } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -11,6 +11,7 @@ import TenantDashboard from '../screens/tenant/TenantDashboard';
 import RentalAgreementScreen from '../screens/tenant/RentalAgreementScreen';
 import PaymentHistoryScreen from '../screens/tenant/PaymentHistoryScreen';
 import RentPaymentScreen from '../screens/tenant/RentPaymentScreen';
+import UtilityBillsScreen from '../screens/tenant/UtilityBillsScreen';
 import PaymentSuccessScreen from '../screens/tenant/PaymentSuccessScreen';
 import MaintenanceRequestScreen from '../screens/tenant/MaintenanceRequestScreen';
 import IssueMessagesScreen from '../screens/shared/IssueMessagesScreen';
@@ -25,13 +26,15 @@ const Tab = createBottomTabNavigator();
 const DashboardStack = createStackNavigator();
 const PaymentsStack = createStackNavigator();
 const MaintenanceStack = createStackNavigator();
-const CommunityStack = createStackNavigator();
+const MenuStack = createStackNavigator();
 
 function DashboardStackNav() {
   return (
     <DashboardStack.Navigator screenOptions={{ headerShown: false }}>
       <DashboardStack.Screen name="TenantDashboard" component={TenantDashboard} />
       <DashboardStack.Screen name="RentalAgreement" component={RentalAgreementScreen} />
+      <DashboardStack.Screen name="UtilityBills" component={UtilityBillsScreen} />
+      <DashboardStack.Screen name="PaymentSuccess" component={PaymentSuccessScreen} />
     </DashboardStack.Navigator>
   );
 }
@@ -41,6 +44,7 @@ function PaymentsStackNav() {
     <PaymentsStack.Navigator screenOptions={{ headerShown: false }}>
       <PaymentsStack.Screen name="PaymentHistory" component={PaymentHistoryScreen} />
       <PaymentsStack.Screen name="RentPayment" component={RentPaymentScreen} />
+      <PaymentsStack.Screen name="UtilityBills" component={UtilityBillsScreen} />
       <PaymentsStack.Screen name="PaymentSuccess" component={PaymentSuccessScreen} />
     </PaymentsStack.Navigator>
   );
@@ -55,35 +59,37 @@ function MaintenanceStackNav() {
   );
 }
 
-function CommunityStackNav() {
+function MenuStackNav() {
   return (
-    <CommunityStack.Navigator screenOptions={{ headerShown: false }}>
-      <CommunityStack.Screen name="CommunityMain" component={CommunityScreen} />
-      <CommunityStack.Screen name="OfficeInfo" component={OfficeInfoScreen} />
-      <CommunityStack.Screen name="Announcements" component={AnnouncementsScreen} />
-      <CommunityStack.Screen name="MessagesAlerts" component={MessagesAlertsScreen} />
-      <CommunityStack.Screen name="ShipPlay" component={ShipPlayScreen} />
-    </CommunityStack.Navigator>
+    <MenuStack.Navigator screenOptions={{ headerShown: false }}>
+      <MenuStack.Screen name="MenuMain" component={MenuScreen} />
+      <MenuStack.Screen name="CommunityMain" component={CommunityScreen} />
+      <MenuStack.Screen name="Community" component={CommunityScreen} />
+      <MenuStack.Screen name="OfficeInfo" component={OfficeInfoScreen} />
+      <MenuStack.Screen name="Announcements" component={AnnouncementsScreen} />
+      <MenuStack.Screen name="MessagesAlerts" component={MessagesAlertsScreen} />
+      <MenuStack.Screen name="ShipPlay" component={ShipPlayScreen} />
+    </MenuStack.Navigator>
   );
 }
 
 export default function TenantNavigator() {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
 
   const tabBarStyle = {
-    backgroundColor: colors.surface,
+    backgroundColor: colors.surfaceContainerLowest,
     borderTopWidth: 1,
-    borderTopColor: colors.surfaceContainerHigh,
-    elevation: 8,
-    height: Platform.OS === 'ios' ? (insets.bottom > 0 ? 58 + insets.bottom : 64) : 64,
-    paddingBottom: Platform.OS === 'ios' ? (insets.bottom > 0 ? insets.bottom - 4 : 8) : 8,
+    borderTopColor: colors.outlineVariant,
+    elevation: 12,
+    height: Platform.OS === 'ios' ? (insets.bottom > 0 ? 64 + insets.bottom : 70) : 70,
+    paddingBottom: Platform.OS === 'ios' ? (insets.bottom > 0 ? insets.bottom : 8) : 8,
     paddingTop: 8,
-    paddingHorizontal: 12,
+    paddingHorizontal: 8,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: isDark ? 0.3 : 0.05,
+    shadowRadius: 8,
   };
 
   return (
@@ -92,29 +98,47 @@ export default function TenantNavigator() {
         headerShown: false,
         tabBarStyle: tabBarStyle,
         tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.outline,
+        tabBarInactiveTintColor: colors.onSurfaceVariant,
         tabBarLabelStyle: {
-          fontFamily: fonts.interMedium,
-          fontSize: 10,
-          letterSpacing: -0.2,
+          fontFamily: fonts.interSemiBold,
+          fontSize: 11,
+          letterSpacing: -0.1,
+          marginTop: -2,
         },
-        tabBarIcon: ({ color, size }) => {
+        tabBarIcon: ({ focused, color }) => {
           const icons = {
             Dashboard: 'dashboard',
             Payments: 'payments',
             Maintenance: 'build',
-            Community: 'business',
             Menu: 'menu',
           };
-          return <MaterialIcons name={icons[route.name]} size={size} color={color} />;
+          return (
+            <View style={{ width: 48, height: 28, alignItems: 'center', justifyContent: 'center' }}>
+              {focused && (
+                <View
+                  style={{
+                    position: 'absolute',
+                    width: 48,
+                    height: 28,
+                    borderRadius: 14,
+                    backgroundColor: isDark ? 'rgba(129, 140, 248, 0.18)' : 'rgba(79, 70, 229, 0.12)',
+                  }}
+                />
+              )}
+              <MaterialIcons
+                name={icons[route.name]}
+                size={22}
+                color={color}
+              />
+            </View>
+          );
         },
       })}
     >
       <Tab.Screen name="Dashboard" component={DashboardStackNav} />
       <Tab.Screen name="Payments" component={PaymentsStackNav} />
       <Tab.Screen name="Maintenance" component={MaintenanceStackNav} />
-      <Tab.Screen name="Community" component={CommunityStackNav} />
-      <Tab.Screen name="Menu" component={MenuScreen} />
+      <Tab.Screen name="Menu" component={MenuStackNav} />
     </Tab.Navigator>
   );
 }

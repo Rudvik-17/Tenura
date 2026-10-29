@@ -2,9 +2,22 @@ const METHOD_LABELS = {
   gpay: 'Google Pay',
   phonepe: 'PhonePe',
   paytm: 'Paytm',
+  bhim: 'BHIM / UPI App',
 };
 
-export function buildReceiptHTML({ txnId, amount, method, paidAt, tenantName, propertyName, unitNumber }) {
+export function buildReceiptHTML({
+  txnId,
+  amount,
+  method,
+  paidAt,
+  tenantName,
+  propertyName,
+  unitNumber,
+  paymentTitle,
+  departmentName,
+  departmentUpiId,
+  consumerNumber,
+}) {
   const formattedAmount = `₹${Number(amount).toLocaleString('en-IN')}`;
   const formattedDate = new Date(paidAt).toLocaleDateString('en-IN', {
     day: 'numeric', month: 'long', year: 'numeric',
@@ -14,6 +27,20 @@ export function buildReceiptHTML({ txnId, amount, method, paidAt, tenantName, pr
   });
   const receiptNo = `RCPT-${txnId}`;
   const methodLabel = METHOD_LABELS[method] ?? method;
+  const utilityRows = departmentName
+    ? `
+        <tr>
+          <td class="detail-key">Bill Type</td>
+          <td class="detail-value highlight">${paymentTitle || 'Utility Bill'}</td>
+        </tr>
+        <tr>
+          <td class="detail-key">Department Paid</td>
+          <td class="detail-value">${departmentName}</td>
+        </tr>
+        ${departmentUpiId ? `<tr><td class="detail-key">Department UPI ID</td><td class="detail-value">${departmentUpiId}</td></tr>` : ''}
+        ${consumerNumber ? `<tr><td class="detail-key">Consumer / RR No.</td><td class="detail-value">${consumerNumber}</td></tr>` : ''}
+      `
+    : '';
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -159,6 +186,7 @@ export function buildReceiptHTML({ txnId, amount, method, paidAt, tenantName, pr
         <div class="amount-value">${formattedAmount}</div>
       </div>
       <table class="details-table">
+        ${utilityRows}
         <tr>
           <td class="detail-key">Tenant</td>
           <td class="detail-value">${tenantName}</td>
@@ -196,7 +224,7 @@ export function buildReceiptHTML({ txnId, amount, method, paidAt, tenantName, pr
     <div class="footer">
       <div class="footer-line">This is a computer-generated receipt and does not require a physical signature.</div>
       <div class="footer-line">For queries, contact your property manager via the Tenura app.</div>
-      <div class="footer-brand">TENURA &nbsp;·&nbsp; Secure Property Management</div>
+      <div class="footer-brand">Tenura &nbsp;·&nbsp; Secure Property Management</div>
     </div>
   </div>
 </body>

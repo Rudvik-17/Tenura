@@ -515,7 +515,7 @@ export default function AddPropertyScreen({ navigation }) {
         {/* Property header */}
         <View style={styles.reviewHeader}>
           <View style={styles.reviewIconBg}>
-            <MaterialIcons name={selectedType?.icon ?? 'apartment'} size={26} color={colors.onPrimary} />
+            <MaterialIcons name={selectedType?.icon ?? 'apartment'} size={26} color={colors.primary} />
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.reviewPropertyName}>

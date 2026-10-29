@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
+  Alert,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -20,6 +21,10 @@ import ScreenHeader from '../../components/ScreenHeader';
 import MetricCard from '../../components/MetricCard';
 import StatusChip from '../../components/StatusChip';
 import { RateLimitedButton } from '../../components/RateLimitedButton';
+import {
+  exportRentCollectionPDF,
+  exportRentCollectionExcel,
+} from '../../lib/rentCollectionExport';
 
 const FILTERS = [
   { key: 'all', label: 'All' },
@@ -31,36 +36,49 @@ const FILTERS = [
 const statusVariant = (status) =>
   status === 'paid' ? 'active' : status === 'overdue' ? 'urgent' : 'pending';
 
-export default function RentCollectionScreen() {
+export default function RentCollectionScreen({ navigation }) {
   const { colors } = useTheme();
   const styles = getStyles(colors);
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
 
   const [payments, setPayments] = useState([]);
+  const [ownerName, setOwnerName] = useState('Property Owner');
   const [filter, setFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [exporting, setExporting] = useState(null); // 'pdf' | 'excel' | null
 
   const fetchData = useCallback(async () => {
     if (!user) return;
     setError(null);
 
-    const { data, error: fetchError } = await supabase
-      .from('payments')
-      .select('*, tenants!inner(owner_id, full_name, unit_number, properties(name))')
-      .eq('tenants.owner_id', user.id)
-      .order('due_date', { ascending: false });
+    const [paymentsRes, profileRes] = await Promise.all([
+      supabase
+        .from('payments')
+        .select('*, tenants!inner(owner_id, full_name, unit_number, properties(name))')
+        .eq('tenants.owner_id', user.id)
+        .order('due_date', { ascending: false }),
+      supabase
+        .from('users')
+        .select('full_name')
+        .eq('id', user.id)
+        .maybeSingle(),
+    ]);
 
-    if (fetchError) {
-      setError(fetchError.message);
+    if (profileRes.data?.full_name) {
+      setOwnerName(profileRes.data.full_name);
+    }
+
+    if (paymentsRes.error) {
+      setError(paymentsRes.error.message);
       setLoading(false);
       setRefreshing(false);
       return;
     }
 
-    setPayments(data ?? []);
+    setPayments(paymentsRes.data ?? []);
     setLoading(false);
     setRefreshing(false);
   }, [user?.id]);
@@ -71,9 +89,17 @@ export default function RentCollectionScreen() {
 
   const onRefresh = () => { setRefreshing(true); fetchData(); };
 
-  const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+  const now = new Date();
+  const currentMonthName = now.toLocaleString('en-IN', { month: 'long' });
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+
   const mtdCollected = payments
-    .filter(p => p.status === 'paid' && p.paid_at && new Date(p.paid_at) >= startOfMonth)
+    .filter(p => {
+      if (p.status !== 'paid') return false;
+      const d = p.paid_at ? new Date(p.paid_at) : (p.due_date ? new Date(p.due_date) : null);
+      return d && d >= startOfMonth && d <= endOfMonth;
+    })
     .reduce((s, p) => s + Number(p.amount), 0);
   const totalPending = payments
     .filter(p => p.status === 'pending' || p.status === 'overdue')
@@ -92,6 +118,63 @@ export default function RentCollectionScreen() {
           day: 'numeric', month: 'short', year: 'numeric',
         })
       : '—';
+
+  const handleExportPDF = async () => {
+    const recordsToExport = filter === 'all' ? payments : filtered;
+    if (!recordsToExport || recordsToExport.length === 0) {
+      Alert.alert('No Records', 'There are no payment records available to export.');
+      return;
+    }
+    setExporting('pdf');
+    try {
+      await exportRentCollectionPDF({
+        payments: recordsToExport,
+        metrics: { mtdCollected, totalPending, collectionRate },
+        ownerName,
+      });
+    } catch (err) {
+      if (err.message && !err.message.includes('canceled') && !err.message.includes('cancelled')) {
+        Alert.alert('Export Failed', err.message || 'Unable to generate PDF report.');
+      }
+    } finally {
+      setExporting(null);
+    }
+  };
+
+  const handleExportExcel = async () => {
+    const recordsToExport = filter === 'all' ? payments : filtered;
+    if (!recordsToExport || recordsToExport.length === 0) {
+      Alert.alert('No Records', 'There are no payment records available to export.');
+      return;
+    }
+    setExporting('excel');
+    try {
+      await exportRentCollectionExcel({
+        payments: recordsToExport,
+        metrics: { mtdCollected, totalPending, collectionRate },
+        ownerName,
+      });
+    } catch (err) {
+      if (err.message && !err.message.includes('canceled') && !err.message.includes('cancelled')) {
+        Alert.alert('Export Failed', err.message || 'Unable to generate Excel file.');
+      }
+    } finally {
+      setExporting(null);
+    }
+  };
+
+  const handleExportPrompt = () => {
+    Alert.alert(
+      'Export Rent Collection',
+      'Select format to export or share:',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: '📄 Export as PDF', onPress: handleExportPDF },
+        { text: '📊 Export as Excel (CSV)', onPress: handleExportExcel },
+      ],
+      { cancelable: true }
+    );
+  };
 
   const renderPayment = ({ item }) => (
     <View style={styles.paymentRow}>
@@ -116,28 +199,63 @@ export default function RentCollectionScreen() {
 
   if (loading) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color={colors.primary} />
+      <View style={styles.container}>
+        <ScreenHeader
+          title="Rent Collection"
+          showBack
+          onBack={() => navigation.goBack()}
+          showBell
+        />
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
       </View>
     );
   }
 
   if (error) {
     return (
-      <View style={styles.centered}>
-        <MaterialIcons name="error-outline" size={40} color={colors.error} />
-        <Text style={styles.errorTitle}>Unable to load payments</Text>
-        <Text style={styles.errorMsg}>{error}</Text>
-        <RateLimitedButton style={styles.retryBtn} onPress={fetchData}>
-          <Text style={styles.retryText}>Retry</Text>
-        </RateLimitedButton>
+      <View style={styles.container}>
+        <ScreenHeader
+          title="Rent Collection"
+          showBack
+          onBack={() => navigation.goBack()}
+          showBell
+        />
+        <View style={styles.centered}>
+          <MaterialIcons name="error-outline" size={40} color={colors.error} />
+          <Text style={styles.errorTitle}>Unable to load payments</Text>
+          <Text style={styles.errorMsg}>{error}</Text>
+          <RateLimitedButton style={styles.retryBtn} onPress={fetchData}>
+            <Text style={styles.retryText}>Retry</Text>
+          </RateLimitedButton>
+        </View>
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      <ScreenHeader title="Rent Collection" showBell />
+      <ScreenHeader
+        title="Rent Collection"
+        showBack
+        onBack={() => navigation.goBack()}
+        rightElement={
+          <TouchableOpacity
+            style={styles.headerExportBtn}
+            onPress={handleExportPrompt}
+            disabled={exporting !== null}
+            activeOpacity={0.7}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            {exporting ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <MaterialIcons name="ios-share" size={22} color="#FFFFFF" />
+            )}
+          </TouchableOpacity>
+        }
+      />
       <FlatList
         data={filtered}
         keyExtractor={item => item.id}
@@ -148,13 +266,59 @@ export default function RentCollectionScreen() {
         }
         ListHeaderComponent={
           <>
+            <View style={styles.exportBanner}>
+              <View style={styles.exportHeaderLeft}>
+                <MaterialIcons name="ios-share" size={16} color={colors.primary} />
+                <Text style={styles.exportBannerTitle}>Export Statement</Text>
+                <View style={styles.exportCountBadge}>
+                  <Text style={styles.exportCountText}>
+                    {filter === 'all' ? payments.length : filtered.length}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.exportButtonsRow}>
+                <TouchableOpacity
+                  style={styles.exportPill}
+                  onPress={handleExportPDF}
+                  disabled={exporting !== null}
+                  activeOpacity={0.7}
+                >
+                  {exporting === 'pdf' ? (
+                    <ActivityIndicator size="small" color="#DC2626" />
+                  ) : (
+                    <>
+                      <MaterialIcons name="picture-as-pdf" size={15} color="#DC2626" />
+                      <Text style={styles.exportPillText}>PDF</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.exportPill}
+                  onPress={handleExportExcel}
+                  disabled={exporting !== null}
+                  activeOpacity={0.7}
+                >
+                  {exporting === 'excel' ? (
+                    <ActivityIndicator size="small" color="#16A34A" />
+                  ) : (
+                    <>
+                      <MaterialIcons name="grid-on" size={15} color="#16A34A" />
+                      <Text style={styles.exportPillText}>Excel</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+
             <View style={styles.metricsGrid}>
               <View style={styles.metricsRow}>
                 <MetricCard
                   icon="payments"
                   value={fmt(mtdCollected)}
-                  label="Monthly Inputs"
-                  trendUp
+                  label={`${currentMonthName} Collection`}
+                  trendUp={mtdCollected > 0}
                 />
                 <View style={{ width: 12 }} />
                 <MetricCard
@@ -162,20 +326,6 @@ export default function RentCollectionScreen() {
                   value={fmt(totalPending)}
                   label="Pending"
                   trendUp={false}
-                />
-              </View>
-              <View style={[styles.metricsRow, { marginTop: 12 }]}>
-                <MetricCard
-                  icon="percent"
-                  value={`${collectionRate}%`}
-                  label="Collection Rate"
-                  trendUp={collectionRate >= 80}
-                />
-                <View style={{ width: 12 }} />
-                <MetricCard
-                  icon="receipt-long"
-                  value={String(payments.length)}
-                  label="Total Records"
                 />
               </View>
             </View>
@@ -225,6 +375,69 @@ const getStyles = (colors) => StyleSheet.create({
   centered: {
     flex: 1, alignItems: 'center', justifyContent: 'center',
     backgroundColor: colors.surface, padding: 24,
+  },
+
+  headerExportBtn: {
+    padding: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  exportBanner: {
+    backgroundColor: colors.surfaceContainerLowest,
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.outlineVariant || 'rgba(0,0,0,0.06)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  exportHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  exportBannerTitle: {
+    fontFamily: fonts.manropeSemiBold,
+    fontSize: 13,
+    color: colors.onSurface,
+  },
+  exportCountBadge: {
+    backgroundColor: colors.surfaceContainerHighest,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 9999,
+  },
+  exportCountText: {
+    fontFamily: fonts.interMedium,
+    fontSize: 11,
+    color: colors.onSurfaceVariant,
+  },
+  exportButtonsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  exportPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: colors.surface,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.outlineVariant || 'rgba(0,0,0,0.08)',
+  },
+  exportPillText: {
+    fontFamily: fonts.interSemiBold,
+    fontSize: 12,
+    color: colors.onSurface,
   },
 
   metricsGrid: {

@@ -160,7 +160,7 @@ export default function OwnerDashboard({ navigation }) {
         >
           <View style={styles.emptyHero}>
             <View style={styles.emptyIconCircle}>
-              <MaterialIcons name="domain-add" size={48} color={colors.onPrimary} />
+              <MaterialIcons name="domain-add" size={48} color={colors.primary} />
             </View>
             <Text style={styles.emptyTitle}>No properties yet</Text>
             <Text style={styles.emptySubtitle}>
@@ -191,7 +191,7 @@ export default function OwnerDashboard({ navigation }) {
       >
         {/* Hero summary */}
         <View style={styles.heroSection}>
-          <Text style={styles.heroLabel}>RENT COLLECTED</Text>
+          <Text style={styles.heroLabel}>Rent collected</Text>
           <Text style={styles.heroValue}>{formatCrore(metrics?.totalCollected ?? 0)}</Text>
           <Text style={styles.heroSubtitle}>
             {properties.length} {properties.length === 1 ? 'property' : 'properties'} · Managed portfolio
@@ -209,20 +209,7 @@ export default function OwnerDashboard({ navigation }) {
             <View style={styles.metricGap} />
             <TouchableOpacity
               style={{ flex: 1 }}
-              onPress={() => navigation.getParent()?.navigate('Finance')}
-              activeOpacity={0.8}
-            >
-              <MetricCard
-                icon="payments"
-                value={formatCrore(metrics?.mtdCollected ?? 0)}
-                label="Monthly Inputs"
-              />
-            </TouchableOpacity>
-          </View>
-          <View style={[styles.metricsRow, { marginTop: 12 }]}>
-            <TouchableOpacity
-              style={{ flex: 1 }}
-              onPress={() => navigation.navigate('Issues')}
+              onPress={() => navigation.navigate('Menu', { screen: 'ResidentIssues' })}
               activeOpacity={0.8}
             >
               <MetricCard
@@ -233,12 +220,6 @@ export default function OwnerDashboard({ navigation }) {
                 trendUp={false}
               />
             </TouchableOpacity>
-            <View style={styles.metricGap} />
-            <MetricCard
-              icon="event"
-              value={String(metrics?.expiringLeases ?? 0).padStart(2, '0')}
-              label="Expiring (30d)"
-            />
           </View>
         </View>
 
@@ -260,7 +241,7 @@ export default function OwnerDashboard({ navigation }) {
               >
                 <View style={styles.propertyCardInner}>
                   <View style={styles.propertyIconBg}>
-                    <MaterialIcons name="apartment" size={28} color={colors.onPrimary} />
+                    <MaterialIcons name="apartment" size={28} color={colors.primary} />
                   </View>
                   <View style={styles.propertyInfo}>
                     <Text style={styles.propertyName}>{property.name}</Text>
@@ -350,12 +331,11 @@ const getStyles = (colors) => StyleSheet.create({
   },
   heroLabel: {
     fontFamily: fonts.interSemiBold,
-    fontSize: 11,
-    letterSpacing: 1.5,
+    fontSize: 13,
+    letterSpacing: 0.2,
     color: colors.onPrimaryContainer,
-    opacity: 0.6,
-    textTransform: 'uppercase',
-    marginBottom: 8,
+    opacity: 0.7,
+    marginBottom: 6,
   },
   heroValue: {
     fontFamily: fonts.manropeBold,
@@ -364,10 +344,10 @@ const getStyles = (colors) => StyleSheet.create({
     marginBottom: 4,
   },
   heroSubtitle: {
-    fontFamily: fonts.interRegular,
+    fontFamily: fonts.interMedium,
     fontSize: 13,
     color: colors.onPrimaryContainer,
-    opacity: 0.7,
+    opacity: 0.9,
   },
 
   metricsGrid: {

@@ -20,7 +20,7 @@ export default function ProfileScreen() {
   const { colors } = useTheme();
   const styles = getStyles(colors);
   const insets = useSafeAreaInsets();
-  const { user, role, clearRole } = useAuth();
+  const { user, role } = useAuth();
   const [signingOut, setSigningOut] = useState(false);
 
   const email = user?.email ?? '';
@@ -35,24 +35,6 @@ export default function ProfileScreen() {
 
   const roleLabel = role === 'owner' ? 'Owner' : 'Tenant';
   const roleVariantColor = role === 'owner' ? colors.primary : colors.secondary;
-
-  const handleSwitchRole = () => {
-    Alert.alert(
-      'Switch Role',
-      'This will take you back to the role selection screen. Your current data is not affected.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Switch',
-          onPress: () => {
-            // Clearing role in AuthContext causes RootNavigator to render
-            // RoleSelectionScreen without touching the database.
-            clearRole();
-          },
-        },
-      ]
-    );
-  };
 
   const handleSignOut = async () => {
     Alert.alert(
@@ -97,19 +79,7 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        {/* Actions */}
-        <View style={styles.actionsSection}>
-          <RateLimitedButton style={styles.actionRow} onPress={handleSwitchRole}>
-            <View style={[styles.actionIconBg, { backgroundColor: colors.surfaceContainerLow }]}>
-              <Text style={styles.actionIcon}>⇄</Text>
-            </View>
-            <View style={styles.actionInfo}>
-              <Text style={styles.actionLabel}>Switch Role</Text>
-              <Text style={styles.actionSub}>Change between Owner and Tenant</Text>
-            </View>
-            <Text style={styles.actionChevron}>›</Text>
-          </RateLimitedButton>
-        </View>
+
 
         {/* Sign out */}
         <View style={styles.signOutSection}>

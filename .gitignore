@@ -37,8 +37,11 @@ yarn-error.*
 .env*.local
 
 # AI agent config
+.agent
+.agent/
 .agents/
 agent.yaml
+.vscode/
 
 # typescript
 *.tsbuildinfo

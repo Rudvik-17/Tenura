@@ -112,7 +112,7 @@ export default function SignUpScreen({ navigation }) {
       >
         {/* Hero */}
         <View style={[styles.hero, { paddingTop: insets.top + 32 }]}>
-          <Text style={styles.logoText}>TENURA</Text>
+          <Text style={styles.logoText}>Tenura</Text>
           <Text style={styles.tagline}>Architectural Trust. Defined.</Text>
           <View style={styles.heroDivider} />
         </View>

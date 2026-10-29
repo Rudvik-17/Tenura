@@ -10,7 +10,9 @@ export default function MetricCard({ icon, value, label, trend, trendUp }) {
   const styles = getStyles(colors);
   return (
     <View style={styles.card}>
-      <MaterialIcons name={icon} size={20} color={colors.secondary} style={styles.icon} />
+      <View style={styles.iconBadge}>
+        <MaterialIcons name={icon} size={18} color={colors.primary} />
+      </View>
       <Text style={styles.value}>{value}</Text>
       <Text style={styles.label}>{label}</Text>
       {trend ? (
@@ -45,12 +47,25 @@ MetricCard.defaultProps = {
 const getStyles = (colors) => StyleSheet.create({
   card: {
     backgroundColor: colors.surfaceContainerLowest,
-    borderRadius: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.outlineVariant,
     padding: 16,
     flex: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 5,
+    elevation: 2,
   },
-  icon: {
-    marginBottom: 8,
+  iconBadge: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: colors.primaryContainer,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
   },
   value: {
     fontFamily: fonts.manropeBold,
@@ -59,8 +74,8 @@ const getStyles = (colors) => StyleSheet.create({
     marginBottom: 4,
   },
   label: {
-    fontFamily: fonts.interRegular,
-    fontSize: 12,
+    fontFamily: fonts.interMedium,
+    fontSize: 12.5,
     color: colors.onSurfaceVariant,
   },
   trendRow: {

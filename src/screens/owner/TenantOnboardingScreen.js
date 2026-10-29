@@ -20,6 +20,7 @@ import { useTheme } from '../../context/ThemeContext';
 import { fonts } from '../../theme/typography';
 import ScreenHeader from '../../components/ScreenHeader';
 import PrimaryButton from '../../components/PrimaryButton';
+import { saveTenantDeposit, toAsciiDigits } from '../../lib/securityDeposit';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const STEP_LABELS = ['Tenant Info', 'Property & Unit', 'Lease Details', 'Review'];
@@ -52,11 +53,18 @@ export default function TenantOnboardingScreen({ navigation }) {
     phone: '',
     unitNumber: '',
     monthlyRent: '',
+    securityDeposit: '',
   });
 
   // Returns a stable onChangeText handler for a given field name.
   const onChange = useCallback(
-    (field) => (value) => setForm((f) => ({ ...f, [field]: value })),
+    (field) => (value) => {
+      let finalVal = value;
+      if (field === 'monthlyRent' || field === 'securityDeposit') {
+        finalVal = toAsciiDigits(value).replace(/[^0-9]/g, '');
+      }
+      setForm((f) => ({ ...f, [field]: finalVal }));
+    },
     [],
   );
 
@@ -108,6 +116,11 @@ export default function TenantOnboardingScreen({ navigation }) {
       const rent = Number(form.monthlyRent);
       if (!form.monthlyRent.trim() || isNaN(rent) || rent <= 0)
         errs.monthlyRent = 'Enter a valid rent amount.';
+      if (form.securityDeposit.trim()) {
+        const dep = Number(form.securityDeposit);
+        if (isNaN(dep) || dep < 0)
+          errs.securityDeposit = 'Enter a valid deposit amount.';
+      }
       if (!startDate) errs.startDate = 'Select a start date.';
       if (!endDate) errs.endDate = 'Select an end date.';
       else if (startDate && endDate <= startDate)
@@ -136,25 +149,56 @@ export default function TenantOnboardingScreen({ navigation }) {
     setLoading(true);
 
     // a) Insert tenant row (user_id stays null until tenant signs up)
-    const { data: tenantData, error: tenantError } = await supabase
+    const baseTenantPayload = {
+      owner_id: user.id,
+      property_id: selectedPropertyId,
+      full_name: form.fullName.trim(),
+      email: form.email.trim(),
+      phone: form.phone.trim() || null,
+      unit_number: form.unitNumber.trim(),
+      user_id: null,
+      status: 'pending',
+    };
+
+    let { data: tenantData, error: tenantError } = await supabase
       .from('tenants')
-      .insert({
-        owner_id: user.id,
-        property_id: selectedPropertyId,
-        full_name: form.fullName.trim(),
-        email: form.email.trim(),
-        phone: form.phone.trim() || null,
-        unit_number: form.unitNumber.trim(),
-        user_id: null,
-        status: 'pending',
-      })
+      .insert(
+        form.securityDeposit.trim()
+          ? { ...baseTenantPayload, security_deposit: Number(form.securityDeposit) }
+          : baseTenantPayload
+      )
       .select()
       .single();
+
+    if (tenantError && (tenantError.message?.includes('security_deposit') || tenantError.code === '42703')) {
+      // Retry insert without security_deposit if column does not exist on DB
+      const retryRes = await supabase
+        .from('tenants')
+        .insert(baseTenantPayload)
+        .select()
+        .single();
+      tenantData = retryRes.data;
+      tenantError = retryRes.error;
+    }
 
     if (tenantError) {
       setSubmitError(tenantError.message);
       setLoading(false);
       return;
+    }
+
+    // Save security deposit custom record
+    if (tenantData && form.securityDeposit.trim()) {
+      try {
+        await saveTenantDeposit(tenantData.id, tenantData.full_name, {
+          amount: Number(form.securityDeposit),
+          status: 'pending',
+          deductions: [],
+          notes: 'Configured during tenant onboarding.',
+        });
+      } catch (depErr) {
+        console.warn('Error saving deposit to storage:', depErr);
+      }
     }
 
     // b) Insert lease row
@@ -330,11 +374,35 @@ export default function TenantOnboardingScreen({ navigation }) {
             onChangeText={onChange('monthlyRent')}
             placeholder="e.g. 45000"
             placeholderTextColor={colors.outline}
-            keyboardType="number-pad"
+            keyboardType={Platform.OS === 'ios' ? 'ascii-capable-number-pad' : 'number-pad'}
           />
         </View>
         {fieldErrors.monthlyRent ? (
           <Text style={styles.fieldErrorText}>{fieldErrors.monthlyRent}</Text>
+        ) : null}
+      </View>
+
+      <View style={styles.fieldWrapper}>
+        <Text style={styles.fieldLabel}>SECURITY DEPOSIT (OPTIONAL)</Text>
+        <View style={styles.prefixRow}>
+          <View style={styles.prefixBox}>
+            <Text style={styles.prefixText}>₹</Text>
+          </View>
+          <TextInput
+            style={[
+              styles.input,
+              styles.prefixInput,
+              fieldErrors.securityDeposit && styles.inputError,
+            ]}
+            value={form.securityDeposit}
+            onChangeText={onChange('securityDeposit')}
+            placeholder="e.g. 50000"
+            placeholderTextColor={colors.outline}
+            keyboardType={Platform.OS === 'ios' ? 'ascii-capable-number-pad' : 'number-pad'}
+          />
+        </View>
+        {fieldErrors.securityDeposit ? (
+          <Text style={styles.fieldErrorText}>{fieldErrors.securityDeposit}</Text>
         ) : null}
       </View>
 
@@ -422,6 +490,11 @@ export default function TenantOnboardingScreen({ navigation }) {
           <Text style={[styles.reviewPrimary, styles.reviewAccent]}>
             ₹{Number(form.monthlyRent).toLocaleString('en-IN')}/mo
           </Text>
+          {form.securityDeposit.trim() ? (
+            <Text style={styles.reviewSecondary}>
+              Security Deposit: ₹{Number(form.securityDeposit).toLocaleString('en-IN')}
+            </Text>
+          ) : null}
           <Text style={styles.reviewSecondary}>
             {formatDate(startDate)} → {formatDate(endDate)}
           </Text>

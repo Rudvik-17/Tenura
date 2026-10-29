@@ -77,13 +77,15 @@ supabase
 
 ## Design system
 
-**Colors** (`src/theme/colors.js`):
-- `colors.primary` (#002045) — nav bars, dark hero backgrounds
-- `colors.primaryContainer` (#1a365d) — hero sections
-- `colors.surface` / `surfaceContainerLowest` — screen bg / card fills
-- `colors.tertiaryFixedDim` (#68dba9) — accent green, **financial/positive signals only**
-- `colors.error` — negative values, destructive actions
-- No 1px borders — use background color shifts (`surfaceContainerLow` → `surfaceContainerLowest`) for separation
+**Colors** (`src/theme/colors.js` — "The Linear Obsidian" theme):
+- `colors.primary`: `#4F46E5` (Light) / `#818CF8` (Dark) — active tabs, key CTAs, branding
+- `colors.primaryContainer`: `#EEF2FF` (Light) / `#1E1B4B` (Dark) — hero sections & highlights
+- `colors.secondary`: `#475569` (Light) / `#94A3B8` (Dark) — technical slate metadata, labels, tags
+- `colors.tertiary` / `tertiaryFixedDim`: `#059669` / `#10B981` (Light) / `#10B981` / `#34D399` (Dark) — **financial/positive signals only** (rent collected, positive trend)
+- `colors.surface`: `#FBFBFC` (Light) / `#0A0B0E` (Dark matte obsidian) — screen canvas
+- `colors.surfaceContainerLowest`: `#FFFFFF` (Light) / `#12131A` (Dark) — card fills
+- `colors.error`: `#DC2626` (Light) / `#FB7185` (Dark) — overdue rent, emergency issues, destructive actions
+- Dynamic theming via `useTheme()` hook supporting `'light'`, `'dark'`, and `'system'` modes.
 
 **Typography** (`src/theme/typography.js`):
 - Headlines: **Manrope** (`fonts.manrope*`) — property names, large numbers

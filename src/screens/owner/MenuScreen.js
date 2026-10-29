@@ -12,14 +12,16 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
-import { colors } from '../../theme/colors';
+import { useTheme } from '../../context/ThemeContext';
 import { fonts } from '../../theme/typography';
 import ScreenHeader from '../../components/ScreenHeader';
 import { RateLimitedButton } from '../../components/RateLimitedButton';
 
 export default function MenuScreen({ navigation }) {
+  const { colors } = useTheme();
+  const styles = getStyles(colors);
   const insets = useSafeAreaInsets();
-  const { user, clearRole } = useAuth();
+  const { user } = useAuth();
 
   const [loading, setLoading] = useState(true);
   const [ownerName, setOwnerName] = useState('');
@@ -48,27 +50,7 @@ export default function MenuScreen({ navigation }) {
   }, [user?.id]);
 
   const handleSettings = () => {
-    Alert.alert(
-      'App Settings',
-      'Settings panel is mock in this version.',
-      [{ text: 'OK' }]
-    );
-  };
-
-  const handleSwitchRole = () => {
-    Alert.alert(
-      'Switch Role',
-      'This will take you back to the role selection screen.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Switch',
-          onPress: () => {
-            clearRole();
-          },
-        },
-      ]
-    );
+    navigation.navigate('AppSettings');
   };
 
   const handleSignOut = async () => {
@@ -103,16 +85,22 @@ export default function MenuScreen({ navigation }) {
 
   const menuItems = [
     {
-      id: 'settings',
-      label: 'App Settings',
-      icon: 'settings',
-      action: handleSettings,
+      id: 'issues',
+      label: 'Resident Issues',
+      icon: 'report-problem',
+      action: () => navigation.navigate('ResidentIssues'),
     },
     {
       id: 'community',
       label: 'Community',
       icon: 'business',
-      action: () => navigation.navigate('Community'),
+      action: () => navigation.navigate('CommunityMain'),
+    },
+    {
+      id: 'leases',
+      label: 'Lease Documents',
+      icon: 'history-edu',
+      action: () => navigation.navigate('LeaseDocuments'),
     },
     {
       id: 'portfolio',
@@ -121,10 +109,10 @@ export default function MenuScreen({ navigation }) {
       action: () => navigation.navigate('Portfolio'),
     },
     {
-      id: 'leases',
-      label: 'Lease Documents',
-      icon: 'history-edu',
-      action: () => navigation.navigate('LeaseDocuments'),
+      id: 'settings',
+      label: 'App Settings',
+      icon: 'settings',
+      action: handleSettings,
     },
   ];
 
@@ -164,16 +152,8 @@ export default function MenuScreen({ navigation }) {
         {/* Spacer to push options to bottom */}
         <View style={styles.spacer} />
 
-        {/* Switch Role and Logout */}
+        {/* Logout */}
         <View style={styles.bottomSection}>
-          <RateLimitedButton
-            style={styles.menuRow}
-            onPress={handleSwitchRole}
-            activeOpacity={0.7}
-          >
-            <MaterialIcons name="swap-horiz" size={22} color={colors.primary} />
-            <Text style={[styles.menuLabel, { color: colors.primary }]}>Switch Role</Text>
-          </RateLimitedButton>
 
           <RateLimitedButton
             style={styles.menuRow}
@@ -192,7 +172,7 @@ export default function MenuScreen({ navigation }) {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.surface,

@@ -20,6 +20,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import { supabase } from '../../lib/supabase';
 import { showPaymentConfirmed, scheduleRentReminder } from '../../lib/notifications';
+import { openPhoneUpiApp } from '../../lib/utilityBills';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import { fonts } from '../../theme/typography';
@@ -635,24 +636,17 @@ export default function RentPaymentScreen({ navigation }) {
 
     // Direct UPI Flow
     setPaying(true);
-    const upiUrl = buildUpiUrl(payment.amount);
-    let upiAvailable = false;
-    try {
-      upiAvailable = await Linking.canOpenURL(upiUrl);
-    } catch {
-      upiAvailable = false;
-    }
+    const { opened } = await openPhoneUpiApp({
+      appId: selectedMethod,
+      upiId: OWNER_UPI_ID,
+      payeeName: 'Tenura',
+      amount: payment.amount,
+      transactionNote: 'Rent Payment',
+    });
 
-    if (upiAvailable) {
+    if (opened) {
       // Hand off to UPI app; markPaymentPaid fires when user returns via AppState listener
       awaitingUpiReturn.current = true;
-      try {
-        await Linking.openURL(upiUrl);
-      } catch {
-        awaitingUpiReturn.current = false;
-        setPaying(false);
-        Alert.alert('Error', 'Could not open the selected UPI app.');
-      }
     } else {
       setPaying(false);
       const methodObj = PAYMENT_METHODS.find(m => m.id === selectedMethod);
@@ -800,6 +794,26 @@ export default function RentPaymentScreen({ navigation }) {
             </View>
           )}
         </View>
+
+        {/* Switch to Water & Electricity Bills Banner */}
+        <TouchableOpacity
+          style={styles.utilitySwitchBanner}
+          activeOpacity={0.85}
+          onPress={() => navigation.navigate('UtilityBills', { initialBillType: 'electricity' })}
+        >
+          <View style={styles.utilitySwitchLeft}>
+            <View style={styles.utilitySwitchIcon}>
+              <MaterialIcons name="bolt" size={20} color={colors.primary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.utilitySwitchTitle}>Pay Water & Electricity Bills</Text>
+              <Text style={styles.utilitySwitchSub}>
+                Direct UPI payment to BESCOM, BWSSB & utility departments
+              </Text>
+            </View>
+          </View>
+          <MaterialIcons name="arrow-forward" size={18} color={colors.primary} />
+        </TouchableOpacity>
 
         {/* Payment Methods Section */}
         <View style={styles.methodsSection}>
@@ -1303,6 +1317,45 @@ const getStyles = (colors) => StyleSheet.create({
     fontFamily: fonts.interRegular, fontSize: 13,
     color: colors.onPrimaryContainer,
     opacity: 0.7,
+  },
+
+  utilitySwitchBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginHorizontal: 20,
+    marginTop: 16,
+    padding: 14,
+    borderRadius: 12,
+    backgroundColor: colors.surfaceContainerLowest,
+    borderWidth: 1,
+    borderColor: `${colors.primary}30`,
+    gap: 10,
+  },
+  utilitySwitchLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  utilitySwitchIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    backgroundColor: `${colors.primary}15`,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  utilitySwitchTitle: {
+    fontFamily: fonts.manropeBold,
+    fontSize: 14,
+    color: colors.onSurface,
+  },
+  utilitySwitchSub: {
+    fontFamily: fonts.interRegular,
+    fontSize: 11.5,
+    color: colors.onSurfaceVariant,
+    marginTop: 2,
   },
 
   methodsSection: { padding: 20 },

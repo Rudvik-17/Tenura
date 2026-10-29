@@ -4,11 +4,11 @@ import PropTypes from 'prop-types';
 import { useTheme } from '../context/ThemeContext';
 import { fonts } from '../theme/typography';
 
-export default function SectionHeader({ title, actionLabel, onAction }) {
+export default function SectionHeader({ title, actionLabel, onAction, style }) {
   const { colors } = useTheme();
   const styles = getStyles(colors);
   return (
-    <View style={styles.row}>
+    <View style={[styles.row, style]}>
       <Text style={styles.title}>{title}</Text>
       {actionLabel ? (
         <TouchableOpacity onPress={onAction} activeOpacity={0.7}>
@@ -23,11 +23,13 @@ SectionHeader.propTypes = {
   title: PropTypes.string.isRequired,
   actionLabel: PropTypes.string,
   onAction: PropTypes.func,
+  style: PropTypes.oneOfType([PropTypes.object, PropTypes.array]),
 };
 
 SectionHeader.defaultProps = {
   actionLabel: null,
   onAction: null,
+  style: null,
 };
 
 const getStyles = (colors) => StyleSheet.create({
@@ -38,7 +40,7 @@ const getStyles = (colors) => StyleSheet.create({
     marginBottom: 12,
   },
   title: {
-    fontFamily: fonts.manropeSemiBold,
+    fontFamily: fonts.manropeBold,
     fontSize: 18,
     color: colors.onSurface,
   },

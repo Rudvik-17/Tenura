@@ -8,11 +8,13 @@ import {
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors } from '../../theme/colors';
+import { useTheme } from '../../context/ThemeContext';
 import { fonts } from '../../theme/typography';
 import ScreenHeader from '../../components/ScreenHeader';
 
 export default function CommunityScreen({ navigation }) {
+  const { colors } = useTheme();
+  const styles = getStyles(colors);
   const insets = useSafeAreaInsets();
 
   const communityItems = [
@@ -37,20 +39,14 @@ export default function CommunityScreen({ navigation }) {
       icon: 'notification-important',
       screen: 'MessagesAlerts',
     },
-    {
-      id: 'ShipPlay',
-      title: 'Ship&Play',
-      description: 'Mock services and integrations offered to community properties',
-      icon: 'people',
-      screen: 'ShipPlay',
-    },
   ];
 
   return (
     <View style={styles.container}>
       <ScreenHeader
         title="Community Portal"
-        showBack={false}
+        showBack
+        onBack={() => navigation.goBack()}
       />
       <ScrollView
         contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 24 }]}
@@ -80,7 +76,7 @@ export default function CommunityScreen({ navigation }) {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.surface,

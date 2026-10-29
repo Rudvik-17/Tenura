@@ -289,7 +289,12 @@ export default function ResidentIssuesScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      <ScreenHeader title="Issues" showBell />
+      <ScreenHeader
+        title="Resident Issues"
+        showBack
+        onBack={() => navigation.goBack()}
+        showBell
+      />
 
       <FlatList
         data={filtered}

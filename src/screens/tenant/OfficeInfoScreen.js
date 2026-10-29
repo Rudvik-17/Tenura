@@ -63,19 +63,49 @@ export default function OfficeInfoScreen({ navigation }) {
     loadData();
   }, [user?.id]);
 
-  const handleCall = () => {
-    if (ownerInfo?.phone) {
-      Linking.openURL(`tel:${ownerInfo.phone}`);
-    } else {
+  const handleCall = async () => {
+    const phone = ownerInfo?.phone;
+    if (!phone) {
       Alert.alert('Unavailable', 'No phone number on file for this property office.');
+      return;
+    }
+    const url = `tel:${phone}`;
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (supported) {
+        await Linking.openURL(url);
+      } else {
+        Alert.alert('Call Office', `Phone: ${phone}`, [
+          { text: 'OK' },
+        ]);
+      }
+    } catch (err) {
+      Alert.alert('Call Office', `Phone: ${phone}`, [
+        { text: 'OK' },
+      ]);
     }
   };
 
-  const handleEmail = () => {
-    if (ownerInfo?.email) {
-      Linking.openURL(`mailto:${ownerInfo.email}`);
-    } else {
+  const handleEmail = async () => {
+    const email = ownerInfo?.email;
+    if (!email) {
       Alert.alert('Unavailable', 'No email address on file for this property office.');
+      return;
+    }
+    const url = `mailto:${email}`;
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (supported) {
+        await Linking.openURL(url);
+      } else {
+        Alert.alert('Email Office', `Email: ${email}`, [
+          { text: 'OK' },
+        ]);
+      }
+    } catch (err) {
+      Alert.alert('Email Office', `Email: ${email}`, [
+        { text: 'OK' },
+      ]);
     }
   };
 

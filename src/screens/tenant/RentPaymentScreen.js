@@ -28,6 +28,12 @@ import ScreenHeader from '../../components/ScreenHeader';
 import StatusChip from '../../components/StatusChip';
 import PrimaryButton from '../../components/PrimaryButton';
 import { RateLimitedButton } from '../../components/RateLimitedButton';
+import {
+  createRazorpayOrder,
+  verifyRazorpayCheckout,
+  reconcileRazorpayPayment,
+  isValidPaymentUuid,
+} from '../../services/razorpayService';
 
 function generateRazorpayHtml(keyId, amount, email, name, phone, orderId) {
   const amountInPaise = Math.round(amount * 100);
@@ -235,6 +241,7 @@ export default function RentPaymentScreen({ navigation }) {
   // Real Razorpay WebView states
   const [showRealRazorpay, setShowRealRazorpay] = useState(false);
   const [razorpayHtml, setRazorpayHtml] = useState('');
+  const activeOrderIdRef = useRef(null);
 
   // UPI Manual Verification states
   const [showUtrModal, setShowUtrModal] = useState(false);
@@ -367,13 +374,21 @@ export default function RentPaymentScreen({ navigation }) {
       }
     }
 
+    // Reconcile any interrupted Razorpay checkout attempts if payment is still pending/overdue
+    if (paymentData && isValidPaymentUuid(paymentData.id) && (paymentData.status === 'pending' || paymentData.status === 'overdue')) {
+      const { data: reconData } = await reconcileRazorpayPayment({ paymentId: paymentData.id });
+      if (reconData?.reconciled && reconData?.status === 'paid') {
+        paymentData = null;
+      }
+    }
+
     setLease(leaseData ?? { monthly_rent: 15000 });
-    setPayment(paymentData ?? {
+    setPayment(paymentData ?? (leaseData ? null : {
       id: 'mock-payment-id',
       amount: 15000,
       due_date: new Date().toISOString(),
       status: 'pending'
-    });
+    }));
     setLoading(false);
 
     if (paymentData?.due_date) {
@@ -426,6 +441,39 @@ export default function RentPaymentScreen({ navigation }) {
     });
   }, [payment, selectedMethod, navigation]);
 
+  const reconcileInterruptedCheckout = useCallback(async (orderIdOverride = null) => {
+    if (!payment || !isValidPaymentUuid(payment.id)) {
+      setPaying(false);
+      return false;
+    }
+
+    const orderToCheck = orderIdOverride || activeOrderIdRef.current;
+    const { data: reconData } = await reconcileRazorpayPayment({
+      paymentId: payment.id,
+      orderId: orderToCheck,
+    });
+
+    if (reconData?.reconciled && reconData?.status === 'paid') {
+      activeOrderIdRef.current = null;
+      setPaying(false);
+      const settledAmount = Number(reconData.amount ?? payment.amount);
+      const txnId = reconData.transactionId || orderToCheck || 'RAZORPAY';
+      const paidAt = reconData.paidAt || new Date().toISOString();
+
+      showPaymentConfirmed({ amount: settledAmount, method: selectedMethod });
+      navigation.navigate('PaymentSuccess', {
+        amount: settledAmount,
+        method: selectedMethod,
+        txnId,
+        paidAt,
+      });
+      return true;
+    }
+
+    setPaying(false);
+    return false;
+  }, [payment, selectedMethod, navigation]);
+
   const verifyRazorpayPayment = useCallback(async (orderId, paymentId, signature) => {
     setPaying(true);
 
@@ -445,29 +493,32 @@ export default function RentPaymentScreen({ navigation }) {
     }
 
     try {
-      const { data: funcData, error: funcError } = await supabase.functions.invoke('razorpay', {
-        body: {
-          action: 'verify-payment',
-          razorpay_order_id: orderId,
-          razorpay_payment_id: paymentId,
-          razorpay_signature: signature,
-          paymentId: payment.id
-        }
+      const { data: funcData, error: funcError } = await verifyRazorpayCheckout({
+        orderId,
+        razorpayPaymentId: paymentId,
+        signature,
+        paymentId: payment.id,
       });
 
-      if (funcError || !funcData || funcData.error) {
-        throw new Error(funcError?.message || funcData?.error || 'Verification failed.');
+      if (funcError || !funcData) {
+        // Attempt server-side reconciliation in case callback was interrupted after capture
+        const reconciled = await reconcileInterruptedCheckout(orderId);
+        if (reconciled) return;
+        throw funcError || new Error('Verification failed.');
       }
 
-      const txnId = paymentId;
-      const now = new Date().toISOString();
+      activeOrderIdRef.current = null;
+      setPaying(false);
+      const settledAmount = Number(funcData.amount ?? payment.amount);
+      const txnId = funcData.transactionId || paymentId;
+      const paidAt = funcData.paidAt || new Date().toISOString();
 
-      showPaymentConfirmed({ amount: payment.amount, method: selectedMethod });
+      showPaymentConfirmed({ amount: settledAmount, method: selectedMethod });
       navigation.navigate('PaymentSuccess', {
-        amount: payment.amount,
+        amount: settledAmount,
         method: selectedMethod,
         txnId,
-        paidAt: now,
+        paidAt,
       });
     } catch (err) {
       setPaying(false);
@@ -476,7 +527,7 @@ export default function RentPaymentScreen({ navigation }) {
         `Payment succeeded but verification failed: ${err.message}`
       );
     }
-  }, [payment, selectedMethod, navigation]);
+  }, [payment, selectedMethod, navigation, reconcileInterruptedCheckout]);
 
   // When the user returns from their UPI app, confirm if they completed payment instead of auto-marking paid
   useEffect(() => {
@@ -583,8 +634,8 @@ export default function RentPaymentScreen({ navigation }) {
     if (selectedMethod === 'razorpay') {
       const keyId = process.env.EXPO_PUBLIC_RAZORPAY_KEY_ID;
       
-      if (!keyId || keyId === 'rzp_test_defaultKeyId') {
-        // Fallback to mock simulation modal if no real Key ID is configured in .env
+      if (!keyId || keyId === 'rzp_test_defaultKeyId' || !isValidPaymentUuid(payment.id)) {
+        // Fallback to mock simulation modal if no real Key ID is configured in .env or using demo mock obligation
         Alert.alert(
           'API Key Required',
           'To test real Razorpay checkouts, add EXPO_PUBLIC_RAZORPAY_KEY_ID=rzp_test_... to your .env file.\n\nOpening the interactive simulator instead.',
@@ -603,25 +654,38 @@ export default function RentPaymentScreen({ navigation }) {
       setPaying(true);
       
       try {
-        console.log('PAYMENT OBJECT:', JSON.stringify(payment));
-        const { data: funcData, error: funcError } = await supabase.functions.invoke('razorpay', {
-          body: {
-            action: 'create-order',
-            amount: payment.amount,
-            paymentId: payment.id
-          }
-        });
+        const { data: funcData, error: funcError } = await createRazorpayOrder(payment.id);
 
-        if (funcError || !funcData || funcData.error) {
-          throw new Error(funcError?.message || funcData?.error || 'Failed to generate order ID.');
+        if (funcError || !funcData) {
+          throw funcError || new Error('Failed to generate order ID.');
+        }
+
+        // If a previous interrupted checkout for this payment was already captured on Razorpay, reconcile immediately
+        if (funcData.alreadyPaid || funcData.reconciled) {
+          activeOrderIdRef.current = null;
+          setPaying(false);
+          const settledAmount = Number(funcData.verifiedAmount ?? payment.amount);
+          const txnId = funcData.transactionId || funcData.razorpayPaymentId || funcData.orderId || 'RAZORPAY';
+          const paidAt = funcData.paidAt || new Date().toISOString();
+
+          showPaymentConfirmed({ amount: settledAmount, method: selectedMethod });
+          navigation.navigate('PaymentSuccess', {
+            amount: settledAmount,
+            method: selectedMethod,
+            txnId,
+            paidAt,
+          });
+          return;
         }
 
         const orderId = funcData.orderId;
+        const verifiedAmount = Number(funcData.verifiedAmount ?? payment.amount);
+        activeOrderIdRef.current = orderId;
         const email = user.email || '';
         const name = user.user_metadata?.full_name || 'Tenant';
         const phone = tenantPhone || '9999999999';
         
-        const html = generateRazorpayHtml(keyId, payment.amount, email, name, phone, orderId);
+        const html = generateRazorpayHtml(keyId, verifiedAmount, email, name, phone, orderId);
         setRazorpayHtml(html);
         setShowRealRazorpay(true);
       } catch (err) {
@@ -1134,7 +1198,7 @@ export default function RentPaymentScreen({ navigation }) {
         animationType="slide"
         onRequestClose={() => {
           setShowRealRazorpay(false);
-          setPaying(false);
+          reconcileInterruptedCheckout();
         }}
       >
         <View style={{ flex: 1, paddingTop: insets.top, backgroundColor: '#fff' }}>
@@ -1144,7 +1208,7 @@ export default function RentPaymentScreen({ navigation }) {
               style={styles.webViewCloseBtn}
               onPress={() => {
                 setShowRealRazorpay(false);
-                setPaying(false);
+                reconcileInterruptedCheckout();
               }}
             >
               <MaterialIcons name="close" size={24} color={colors.onSurface} />
@@ -1154,7 +1218,7 @@ export default function RentPaymentScreen({ navigation }) {
           </View>
           
           <WebView
-            originWhitelist={['*']}
+            originWhitelist={['https://*', 'upi://*', 'about:*']}
             source={{ html: razorpayHtml, baseUrl: 'https://olswwdunaivwxefelasc.supabase.co' }}
             onMessage={(event) => {
               try {
@@ -1172,7 +1236,7 @@ export default function RentPaymentScreen({ navigation }) {
                   verifyRazorpayPayment(data.razorpay_order_id, data.razorpay_payment_id, data.razorpay_signature);
                 } else if (data.status === 'dismissed') {
                   setShowRealRazorpay(false);
-                  setPaying(false);
+                  reconcileInterruptedCheckout();
                 } else if (data.status === 'failed') {
                   setShowRealRazorpay(false);
                   setPaying(false);

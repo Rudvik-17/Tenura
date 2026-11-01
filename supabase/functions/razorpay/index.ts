@@ -214,6 +214,14 @@ async function verifyAndSettleAttempt(params: {
     ? new Date(rzpPayment.created_at * 1000).toISOString()
     : new Date().toISOString()
 
+  // Persist capture evidence first so even a transient failure before settlement can be reconciled without re-charging
+  await supabaseAdmin.rpc('record_razorpay_attempt_capture', {
+    p_provider_order_id: attempt.provider_order_id,
+    p_provider_payment_id: rzpPayment.id,
+    p_verified_amount_paise: providerAmountPaise,
+    p_provider_signature: signature ?? null,
+  })
+
   const { data: rpcData, error: rpcError } = await supabaseAdmin.rpc('consume_razorpay_payment_attempt', {
     p_provider_order_id: attempt.provider_order_id,
     p_provider_payment_id: rzpPayment.id,
@@ -240,11 +248,21 @@ async function reconcilePendingAttemptsForPayment(params: {
 }): Promise<Record<string, any> | null> {
   const { supabaseAdmin, paymentId, callerUserId, specificOrderId } = params
 
+  // 1. First run database-level reconciliation of any already-captured attempt
+  const { data: dbReconciled } = await supabaseAdmin.rpc('reconcile_captured_payment_attempts', {
+    p_payment_id: paymentId,
+    p_caller_user_id: callerUserId ?? null,
+  })
+
+  if (dbReconciled && dbReconciled.reconciled && dbReconciled.status === 'paid') {
+    return dbReconciled as Record<string, any>
+  }
+
   let query = supabaseAdmin
     .from('payment_attempts')
     .select('*')
     .eq('payment_id', paymentId)
-    .in('status', ['created', 'captured', 'consumed'])
+    .in('status', ['created', 'captured', 'consumed', 'expired'])
     .order('created_at', { ascending: false })
     .limit(10)
 
@@ -342,11 +360,58 @@ serve(async (req) => {
 
     try {
       const event = JSON.parse(rawBody)
+      const eventName = String(event?.event || '')
       const paymentEntity = event?.payload?.payment?.entity
+      const refundEntity = event?.payload?.refund?.entity
       const orderId = paymentEntity?.order_id || event?.payload?.order?.entity?.id
-      const paymentId = paymentEntity?.id
+      const paymentId = paymentEntity?.id || refundEntity?.payment_id
 
-      if (!orderId || !paymentId) {
+      if (eventName === 'refund.failed') {
+        return jsonResponse({ received: true, ignored: true, reason: 'refund_failed' })
+      }
+
+      // Handle provider-initiated refund webhooks (refund.processed / refund.created / payment.refunded)
+      if (eventName === 'refund.processed' || eventName === 'refund.created' || eventName === 'payment.refunded') {
+        if (!paymentId) {
+          return jsonResponse({ received: true, ignored: true, reason: 'missing_refund_payment_id' })
+        }
+
+        const { data: paidPayment } = await supabaseAdmin
+          .from('payments')
+          .select('id, amount, status')
+          .eq('razorpay_payment_id', paymentId)
+          .maybeSingle()
+
+        if (!paidPayment) {
+          return jsonResponse({ received: true, ignored: true, reason: 'unknown_payment_for_refund' })
+        }
+
+        const refundPaise = Number(refundEntity?.amount || paymentEntity?.amount_refunded || 0)
+        const refundRupees = refundPaise > 0 ? Number((refundPaise / 100).toFixed(2)) : Number(paidPayment.amount)
+        const refundRef = refundEntity?.id || `RZP-RFND-${paymentId}`
+
+        const { data: refundResult, error: refundErr } = await supabaseAdmin.rpc('refund_payment', {
+          p_payment_id: paidPayment.id,
+          p_refund_amount: refundRupees,
+          p_reason: `Razorpay webhook (${eventName})`,
+          p_refund_reference: refundRef,
+        })
+
+        if (refundErr) {
+          throw new Error(refundErr.message)
+        }
+
+        return jsonResponse({
+          received: true,
+          refunded: true,
+          paymentId: paidPayment.id,
+          status: refundResult?.status,
+          netAmount: refundResult?.net_amount,
+          idempotentReplay: refundResult?.idempotent_replay,
+        })
+      }
+
+      if (!orderId) {
         return jsonResponse({ received: true, ignored: true })
       }
 
@@ -358,6 +423,25 @@ serve(async (req) => {
 
       if (!attempt) {
         return jsonResponse({ received: true, ignored: true, reason: 'unknown_order' })
+      }
+
+      // Handle failed checkout webhook without settling or issuing receipt
+      if (eventName === 'payment.failed') {
+        const failureReason = paymentEntity?.error_description || paymentEntity?.error_reason || 'Webhook payment.failed'
+        await supabaseAdmin.rpc('mark_razorpay_attempt_failed', {
+          p_provider_order_id: orderId,
+          p_failure_reason: failureReason,
+        })
+        return jsonResponse({ received: true, status: 'failed', orderId })
+      }
+
+      // Ignore informational events before authorization/capture
+      if (eventName && !['payment.captured', 'payment.authorized', 'order.paid'].includes(eventName)) {
+        return jsonResponse({ received: true, ignored: true, event: eventName })
+      }
+
+      if (!paymentId) {
+        return jsonResponse({ received: true, ignored: true })
       }
 
       const freshPayment = await fetchRazorpayPayment(paymentId)
@@ -375,8 +459,10 @@ serve(async (req) => {
         idempotentReplay: settled.idempotent_replay,
       })
     } catch (err) {
-      console.error('Razorpay webhook processing error:', (err as Error).message)
-      return jsonResponse({ error: (err as Error).message }, 400)
+      const msg = (err as Error).message || 'Webhook processing error'
+      console.error('Razorpay webhook processing error:', msg)
+      const isPermanentValidationError = /mismatch|already settled|already been used|not found|JSON/i.test(msg)
+      return jsonResponse({ error: msg }, isPermanentValidationError ? 400 : 500)
     }
   }
 
@@ -481,10 +567,10 @@ serve(async (req) => {
 
       const cleanPaymentId = paymentId.trim()
 
-      // Fetch payment obligation and verify caller is the owning tenant
+      // Fetch payment obligation, owning tenant, and active lease
       const { data: paymentRow, error: pError } = await supabaseAdmin
         .from('payments')
-        .select('id, tenant_id, lease_id, amount, status, paid_at, razorpay_order_id, razorpay_payment_id, transaction_id, tenants!inner(id, user_id)')
+        .select('id, tenant_id, lease_id, amount, original_amount, status, paid_at, razorpay_order_id, razorpay_payment_id, transaction_id, tenants!inner(id, user_id), leases(id, monthly_rent, status)')
         .eq('id', cleanPaymentId)
         .maybeSingle()
 
@@ -497,7 +583,19 @@ serve(async (req) => {
         return jsonResponse({ error: 'Forbidden: you do not own this payment obligation' }, 403)
       }
 
+      const leaseRecord = Array.isArray(paymentRow.leases) ? paymentRow.leases[0] : paymentRow.leases
+      if (!leaseRecord || leaseRecord.status !== 'active') {
+        return jsonResponse({ error: 'No active lease associated with this payment obligation' }, 400)
+      }
+
       const verifiedAmount = Number(paymentRow.amount)
+      const leaseRent = Number(leaseRecord.monthly_rent)
+      if (!paymentRow.original_amount && Number.isFinite(leaseRent) && verifiedAmount !== leaseRent) {
+        return jsonResponse({
+          error: `Obligation amount (₹${verifiedAmount}) does not match active lease monthly rent (₹${leaseRent})`,
+        }, 400)
+      }
+
       const amountInPaise = Math.round(verifiedAmount * 100)
       if (!Number.isFinite(verifiedAmount) || verifiedAmount <= 0 || amountInPaise <= 0) {
         return jsonResponse({ error: 'Invalid payment amount in database' }, 400)
@@ -525,15 +623,52 @@ serve(async (req) => {
         }, 200)
       }
 
-      if (paymentRow.status === 'paid') {
+      if (['paid', 'partially_refunded', 'refunded'].includes(paymentRow.status)) {
         return jsonResponse({
-          error: 'Payment is already marked as paid',
+          error: 'Payment is already settled',
           alreadyPaid: true,
           paymentId: paymentRow.id,
           paidAt: paymentRow.paid_at,
           transactionId: paymentRow.razorpay_payment_id || paymentRow.transaction_id,
           verifiedAmount,
         }, 409)
+      }
+
+      // Reuse an existing open 'created' attempt if its Razorpay order is still payable (prevents duplicate open orders)
+      const { data: openAttempt } = await supabaseAdmin
+        .from('payment_attempts')
+        .select('id, provider_order_id, expected_amount_paise, currency, created_at')
+        .eq('payment_id', paymentRow.id)
+        .eq('user_id', authenticatedUser.id)
+        .eq('status', 'created')
+        .eq('expected_amount_paise', amountInPaise)
+        .maybeSingle()
+
+      if (openAttempt?.provider_order_id) {
+        const ageMs = now.getTime() - new Date(openAttempt.created_at).getTime()
+        if (ageMs < 25 * 60 * 1000) {
+          try {
+            const existingOrder = await fetchRazorpayOrder(openAttempt.provider_order_id)
+            if (
+              existingOrder &&
+              existingOrder.status === 'created' &&
+              Number(existingOrder.amount) === amountInPaise &&
+              Number(existingOrder.amount_paid || 0) === 0
+            ) {
+              return jsonResponse({
+                attemptId: openAttempt.id,
+                orderId: openAttempt.provider_order_id,
+                paymentId: paymentRow.id,
+                verifiedAmount,
+                amountPaise: amountInPaise,
+                currency: 'INR',
+                reusedAttempt: true,
+              }, 200)
+            }
+          } catch (_err) {
+            // Fall through to create a fresh Razorpay order and expire the stale attempt atomically
+          }
+        }
       }
 
       // Create Razorpay order bound to this exact obligation and paise amount
@@ -565,21 +700,14 @@ serve(async (req) => {
         throw new Error('Razorpay order response did not match expected amount or currency')
       }
 
-      // Persist the server-owned payment attempt before returning the orderId to the client
-      const { data: attemptRow, error: attemptError } = await supabaseAdmin
-        .from('payment_attempts')
-        .insert({
-          payment_id: paymentRow.id,
-          tenant_id: paymentRow.tenant_id,
-          user_id: authenticatedUser.id,
-          expected_amount_paise: amountInPaise,
-          currency: 'INR',
-          provider: 'razorpay',
-          provider_order_id: order.id,
-          status: 'created',
-        })
-        .select('id, provider_order_id, expected_amount_paise, currency')
-        .single()
+      // Atomically expire any previous open attempt and register the new attempt (locking payment first)
+      const { data: attemptRow, error: attemptError } = await supabaseAdmin.rpc('register_razorpay_payment_attempt', {
+        p_payment_id: paymentRow.id,
+        p_user_id: authenticatedUser.id,
+        p_provider_order_id: order.id,
+        p_expected_amount_paise: amountInPaise,
+        p_currency: 'INR',
+      })
 
       if (attemptError || !attemptRow) {
         throw new Error(attemptError?.message || 'Failed to record server payment attempt')
@@ -755,6 +883,66 @@ serve(async (req) => {
         reconciled: false,
         status: paymentRow.status,
         paymentId: paymentRow.id,
+      }, 200)
+    }
+
+    if (action === 'fail-attempt') {
+      const { razorpay_order_id, reason } = payload
+      if (!razorpay_order_id || typeof razorpay_order_id !== 'string') {
+        return jsonResponse({ error: 'razorpay_order_id is required' }, 400)
+      }
+
+      const cleanOrderId = razorpay_order_id.trim()
+      const { data: attempt } = await supabaseAdmin
+        .from('payment_attempts')
+        .select('*')
+        .eq('provider_order_id', cleanOrderId)
+        .maybeSingle()
+
+      if (!attempt) {
+        return jsonResponse({ error: 'Payment attempt not found' }, 404)
+      }
+
+      if (attempt.user_id !== authenticatedUser.id) {
+        return jsonResponse({ error: 'Forbidden: payment attempt belongs to another user' }, 403)
+      }
+
+      // Check whether the payment was actually captured right before checkout failed/dismissed
+      const settled = await reconcilePendingAttemptsForPayment({
+        supabaseAdmin,
+        paymentId: attempt.payment_id,
+        callerUserId: authenticatedUser.id,
+        specificOrderId: cleanOrderId,
+      })
+
+      if (settled && settled.success) {
+        return jsonResponse({
+          success: true,
+          reconciled: true,
+          status: 'paid',
+          paymentId: settled.payment_id,
+          amount: Number(settled.amount),
+          paidAt: settled.paid_at,
+          transactionId: settled.razorpay_payment_id,
+          orderId: settled.razorpay_order_id,
+        }, 200)
+      }
+
+      const { data: failedRow, error: failErr } = await supabaseAdmin.rpc('mark_razorpay_attempt_failed', {
+        p_provider_order_id: cleanOrderId,
+        p_failure_reason: reason ? String(reason).slice(0, 300) : 'Checkout failed or cancelled',
+      })
+
+      if (failErr) {
+        return jsonResponse({ error: failErr.message }, 400)
+      }
+
+      return jsonResponse({
+        success: true,
+        reconciled: false,
+        status: failedRow?.status || 'failed',
+        orderId: cleanOrderId,
+        paymentId: attempt.payment_id,
       }, 200)
     }
 

@@ -3,6 +3,8 @@ import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system/legacy';
 
 const METHOD_LABELS = {
+  razorpay: 'Razorpay Secure Checkout',
+  upi_direct: 'Direct UPI (Verified)',
   gpay: 'Google Pay',
   phonepe: 'PhonePe',
   paytm: 'Paytm',
@@ -53,7 +55,7 @@ export function buildRentCollectionCSV({ payments = [], metrics = {}, ownerName 
     ['', ''],
     // KPI Summary
     [escapeCSV('SUMMARY METRICS'), ''],
-    [escapeCSV('Total Collected (INR):'), escapeCSV(metrics.mtdCollected ?? 0)],
+    [escapeCSV('Total Net Collected (INR):'), escapeCSV(metrics.mtdCollected ?? 0)],
     [escapeCSV('Pending Dues (INR):'), escapeCSV(metrics.totalPending ?? 0)],
     [escapeCSV('Collection Rate:'), escapeCSV(`${metrics.collectionRate ?? 0}%`)],
     [escapeCSV('Total Records:'), escapeCSV(payments.length)],
@@ -64,9 +66,12 @@ export function buildRentCollectionCSV({ payments = [], metrics = {}, ownerName 
       escapeCSV('Tenant Name'),
       escapeCSV('Unit Number'),
       escapeCSV('Property'),
-      escapeCSV('Amount (₹)'),
+      escapeCSV('Gross Amount (₹)'),
+      escapeCSV('Refunded (₹)'),
+      escapeCSV('Net Amount (₹)'),
       escapeCSV('Due Date'),
       escapeCSV('Status'),
+      escapeCSV('Verification'),
       escapeCSV('Paid Date'),
       escapeCSV('Payment Method'),
       escapeCSV('Transaction ID'),
@@ -78,11 +83,14 @@ export function buildRentCollectionCSV({ payments = [], metrics = {}, ownerName 
     const unit = p.tenants?.unit_number || '—';
     const property = p.tenants?.properties?.name || 'Property';
     const amount = Number(p.amount) || 0;
+    const refunded = Number(p.refunded_amount) || 0;
+    const netAmount = Math.max(0, amount - refunded);
     const dueDate = fmtDate(p.due_date);
     const status = String(p.status || 'pending').toUpperCase();
+    const verification = String(p.verification_status || 'unsettled').toUpperCase();
     const paidDate = p.paid_at ? fmtDate(p.paid_at) : '—';
     const method = METHOD_LABELS[p.payment_method] || p.payment_method || '—';
-    const txnId = p.transaction_id || p.utr_number || '—';
+    const txnId = p.transaction_id || p.razorpay_payment_id || p.utr_number || '—';
 
     lines.push([
       escapeCSV(index + 1),
@@ -90,8 +98,11 @@ export function buildRentCollectionCSV({ payments = [], metrics = {}, ownerName 
       escapeCSV(unit),
       escapeCSV(property),
       escapeCSV(amount),
+      escapeCSV(refunded),
+      escapeCSV(netAmount),
       escapeCSV(dueDate),
       escapeCSV(status),
+      escapeCSV(verification),
       escapeCSV(paidDate),
       escapeCSV(method),
       escapeCSV(txnId),
@@ -122,21 +133,25 @@ export function buildRentCollectionHTML({ payments = [], metrics = {}, ownerName
     const tenantName = p.tenants?.full_name || 'Tenant';
     const unit = p.tenants?.unit_number || '—';
     const property = p.tenants?.properties?.name || 'Property';
-    const amount = fmtINR(p.amount);
+    const refunded = Number(p.refunded_amount || 0);
+    const netAmount = Math.max(0, Number(p.amount || 0) - refunded);
+    const amount = refunded > 0 ? `${fmtINR(netAmount)} (Ref: ${fmtINR(refunded)})` : fmtINR(p.amount);
     const dueDate = fmtDate(p.due_date);
     const paidDate = p.paid_at ? fmtDate(p.paid_at) : '—';
     const method = METHOD_LABELS[p.payment_method] || p.payment_method || '—';
-    const txnId = p.transaction_id || p.utr_number || '—';
+    const txnId = p.transaction_id || p.razorpay_payment_id || p.utr_number || '—';
     const status = (p.status || 'pending').toLowerCase();
 
     let statusBadgeClass = 'badge-pending';
-    let statusLabel = 'PENDING';
-    if (status === 'paid') {
+    let statusLabel = status.replace('_', ' ').toUpperCase();
+    if (status === 'paid' && p.verification_status !== 'legacy_unverified') {
       statusBadgeClass = 'badge-paid';
       statusLabel = 'PAID';
-    } else if (status === 'overdue') {
+    } else if (p.verification_status === 'legacy_unverified') {
+      statusBadgeClass = 'badge-pending';
+      statusLabel = 'LEGACY UNVERIFIED';
+    } else if (status === 'overdue' || status === 'reversed') {
       statusBadgeClass = 'badge-overdue';
-      statusLabel = 'OVERDUE';
     }
 
     return `

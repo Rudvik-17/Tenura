@@ -27,15 +27,39 @@ import PrimaryButton from '../../components/PrimaryButton';
 import { buildReceiptHTML } from '../../lib/receiptHTML';
 import { getTenantUtilityBills } from '../../lib/utilityBills';
 import { RateLimitedButton } from '../../components/RateLimitedButton';
+import {
+  fetchCurrentRentObligation,
+  verifyPaymentReceiptEligibility,
+} from '../../services/razorpayService';
 
 const METHOD_LABELS = {
+  razorpay: 'Razorpay Secure Checkout',
+  upi_direct: 'Direct UPI (Owner Verified)',
+  upi: 'UPI',
   gpay: 'Google Pay',
   phonepe: 'PhonePe',
   paytm: 'Paytm',
 };
 
-const statusVariant = (status) =>
-  status === 'paid' ? 'active' : status === 'overdue' ? 'urgent' : 'pending';
+const statusVariant = (status, verificationStatus) => {
+  if (verificationStatus === 'legacy_unverified' || verificationStatus === 'unverified') {
+    return 'pending';
+  }
+  if (status === 'paid') return 'active';
+  if (status === 'overdue' || status === 'reversed') return 'urgent';
+  return 'pending';
+};
+
+const statusLabel = (status, verificationStatus) => {
+  if (verificationStatus === 'legacy_unverified') return 'Legacy Unverified';
+  if (status === 'under_review') return 'Under Review';
+  if (status === 'partially_refunded') return 'Partial Refund';
+  if (status === 'refunded') return 'Refunded';
+  if (status === 'reversed') return 'Reversed';
+  if (status === 'paid') return 'Paid';
+  if (status === 'overdue') return 'Overdue';
+  return 'Pending';
+};
 
 export default function PaymentHistoryScreen({ navigation }) {
   const { theme, colors } = useTheme();
@@ -129,6 +153,9 @@ export default function PaymentHistoryScreen({ navigation }) {
     setError(null);
     setLoading(true);
 
+    // Ensure server-owned current month rent obligation is derived before reading payments
+    await fetchCurrentRentObligation().catch(() => {});
+
     const { data: tenantRows, error: tenantError } = await supabase
       .from('tenants')
       .select('id, full_name, unit_number, properties(name)')
@@ -192,7 +219,7 @@ export default function PaymentHistoryScreen({ navigation }) {
     const allPayments = paymentsRes.data ?? [];
     setPayments(allPayments);
     setPendingPayment(
-      allPayments.find(p => p.status === 'pending' || p.status === 'overdue') ?? null
+      allPayments.find(p => ['pending', 'overdue', 'under_review', 'reversed'].includes(p.status)) ?? null
     );
     
     setLoading(false);
@@ -211,11 +238,24 @@ export default function PaymentHistoryScreen({ navigation }) {
     setDownloadingIds(new Set(downloadingRef.current));
 
     try {
+      const { data: eligibility } = await verifyPaymentReceiptEligibility(item.id);
+      if (!eligibility?.eligible || !eligibility?.payment) {
+        Alert.alert(
+          'Receipt Unavailable',
+          eligibility?.reason || 'Paid receipts are only issued after confirmed settlement.'
+        );
+        return;
+      }
+
+      const verified = eligibility.payment;
       const html = buildReceiptHTML({
-        txnId: item.transaction_id ?? item.id,
-        amount: item.amount,
-        method: item.payment_method,
-        paidAt: item.paid_at ?? item.due_date,
+        txnId: verified.transaction_id ?? verified.razorpay_payment_id ?? verified.utr_number ?? verified.id,
+        amount: verified.amount,
+        refundedAmount: verified.refunded_amount ?? 0,
+        status: verified.status,
+        verificationStatus: verified.verification_status,
+        method: verified.payment_method,
+        paidAt: verified.paid_at ?? item.due_date,
         tenantName: tenantInfo?.full_name ?? 'Tenant',
         propertyName: tenantInfo?.properties?.name ?? 'Property',
         unitNumber: tenantInfo?.unit_number ?? '—',
@@ -229,8 +269,8 @@ export default function PaymentHistoryScreen({ navigation }) {
           UTI: 'com.adobe.pdf',
         });
       }
-    } catch {
-      Alert.alert('Error', 'Could not generate receipt. Please try again.');
+    } catch (err) {
+      Alert.alert('Error', err?.message || 'Could not generate receipt. Please try again.');
     } finally {
       downloadingRef.current.delete(item.id);
       setDownloadingIds(new Set(downloadingRef.current));
@@ -395,8 +435,7 @@ export default function PaymentHistoryScreen({ navigation }) {
     );
   }
 
-  // Filter out paid payments for the Ledger history
-  const paidPayments = payments.filter(p => p.status === 'paid');
+  const ledgerPayments = payments;
 
   return (
     <View style={styles.container}>
@@ -413,7 +452,13 @@ export default function PaymentHistoryScreen({ navigation }) {
         <View style={styles.heroCard}>
           <View style={styles.heroLeft}>
             <Text style={styles.heroStatusLabel}>
-              {pendingPayment ? 'BALANCE DUE' : 'NO BALANCE DUE'}
+              {pendingPayment
+                ? pendingPayment.status === 'under_review'
+                  ? 'UNDER REVIEW (OUTSTANDING)'
+                  : pendingPayment.status === 'reversed'
+                    ? 'REVERSED — BALANCE DUE'
+                    : 'BALANCE DUE'
+                : 'NO BALANCE DUE'}
             </Text>
             <Text style={styles.heroAmount}>
               ₹{pendingPayment ? Number(pendingPayment.amount).toLocaleString('en-IN') : '0.00'}
@@ -434,7 +479,7 @@ export default function PaymentHistoryScreen({ navigation }) {
               }}
             >
               <Text style={styles.heroPrimaryBtnText}>
-                Make Payment
+                {pendingPayment?.status === 'under_review' ? 'View Status' : 'Make Payment'}
               </Text>
             </TouchableOpacity>
           </View>
@@ -548,46 +593,80 @@ export default function PaymentHistoryScreen({ navigation }) {
           {showLedger && (
             <View style={styles.ledgerExpanded}>
               <Text style={styles.ledgerHeaderTitle}>Transaction History</Text>
-              {paidPayments.length === 0 ? (
+              {ledgerPayments.length === 0 ? (
                 <View style={styles.emptyLedger}>
                   <MaterialIcons name="receipt" size={32} color={colors.outline} />
-                  <Text style={styles.emptyLedgerText}>No paid transaction history yet.</Text>
+                  <Text style={styles.emptyLedgerText}>No rent ledger records yet.</Text>
                 </View>
               ) : (
-                paidPayments.map((item) => (
-                  <View key={item.id} style={styles.paymentRow}>
-                    <View style={styles.paymentIconBg}>
-                      <MaterialIcons name="check-circle" size={18} color={colors.tertiaryFixedDim} />
-                    </View>
-                    <View style={styles.paymentInfo}>
-                      <Text style={styles.paymentAmount}>
-                        ₹{Number(item.amount).toLocaleString('en-IN')}
-                      </Text>
-                      <Text style={styles.paymentMeta}>
-                        Due {formatDate(item.due_date)} · Paid {formatDate(item.paid_at)}
-                      </Text>
-                      {item.payment_method ? (
-                        <Text style={styles.paymentMethod}>
-                          {METHOD_LABELS[item.payment_method] ?? item.payment_method}
+                ledgerPayments.map((item) => {
+                  const canDownloadReceipt =
+                    (item.status === 'paid' || item.status === 'partially_refunded') &&
+                    (item.verification_status === 'verified_provider' ||
+                      item.verification_status === 'verified_owner');
+                  const netAmount = Math.max(
+                    0,
+                    Number(item.amount || 0) - Number(item.refunded_amount || 0)
+                  );
+                  return (
+                    <View key={item.id} style={styles.paymentRow}>
+                      <View style={styles.paymentIconBg}>
+                        <MaterialIcons
+                          name={
+                            item.status === 'paid' && item.verification_status !== 'legacy_unverified'
+                              ? 'check-circle'
+                              : item.status === 'under_review'
+                                ? 'hourglass-top'
+                                : 'receipt'
+                          }
+                          size={18}
+                          color={
+                            item.status === 'paid' && item.verification_status !== 'legacy_unverified'
+                              ? colors.tertiaryFixedDim
+                              : colors.primary
+                          }
+                        />
+                      </View>
+                      <View style={styles.paymentInfo}>
+                        <Text style={styles.paymentAmount}>
+                          ₹{Number(item.amount).toLocaleString('en-IN')}
+                          {Number(item.refunded_amount || 0) > 0
+                            ? ` (Net ₹${netAmount.toLocaleString('en-IN')})`
+                            : ''}
                         </Text>
-                      ) : null}
+                        <Text style={styles.paymentMeta}>
+                          Due {formatDate(item.due_date)}
+                          {item.paid_at ? ` · Paid ${formatDate(item.paid_at)}` : ''}
+                        </Text>
+                        {item.payment_method ? (
+                          <Text style={styles.paymentMethod}>
+                            {METHOD_LABELS[item.payment_method] ?? item.payment_method}
+                            {item.utr_number ? ` · UTR: ${item.utr_number}` : ''}
+                          </Text>
+                        ) : null}
+                      </View>
+                      <View style={styles.paidActions}>
+                        <StatusChip
+                          label={statusLabel(item.status, item.verification_status)}
+                          variant={statusVariant(item.status, item.verification_status)}
+                        />
+                        {canDownloadReceipt ? (
+                          <RateLimitedButton
+                            style={styles.receiptBtn}
+                            onPress={() => handleDownloadReceipt(item)}
+                            disabled={downloadingIds.has(item.id)}
+                          >
+                            {downloadingIds.has(item.id) ? (
+                              <ActivityIndicator size={14} color={colors.primary} />
+                            ) : (
+                              <MaterialIcons name="receipt" size={16} color={colors.primary} />
+                            )}
+                          </RateLimitedButton>
+                        ) : null}
+                      </View>
                     </View>
-                    <View style={styles.paidActions}>
-                      <StatusChip label="paid" variant="active" />
-                      <RateLimitedButton
-                        style={styles.receiptBtn}
-                        onPress={() => handleDownloadReceipt(item)}
-                        disabled={downloadingIds.has(item.id)}
-                      >
-                        {downloadingIds.has(item.id) ? (
-                          <ActivityIndicator size={14} color={colors.primary} />
-                        ) : (
-                          <MaterialIcons name="receipt" size={16} color={colors.primary} />
-                        )}
-                      </RateLimitedButton>
-                    </View>
-                  </View>
-                ))
+                  );
+                })
               )}
             </View>
           )}

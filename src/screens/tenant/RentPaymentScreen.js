@@ -32,19 +32,21 @@ import {
   createRazorpayOrder,
   verifyRazorpayCheckout,
   reconcileRazorpayPayment,
+  reportRazorpayAttemptFailed,
+  fetchCurrentRentObligation,
+  submitUpiReference,
   isValidPaymentUuid,
 } from '../../services/razorpayService';
 
 function generateRazorpayHtml(keyId, amount, email, name, phone, orderId) {
   const amountInPaise = Math.round(amount * 100);
-  
+
   return `
     <!DOCTYPE html>
     <html>
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <script>
-          // Redirect console logs to React Native
           (function() {
             var origLog = console.log;
             console.log = function(...args) {
@@ -133,17 +135,17 @@ function generateRazorpayHtml(keyId, amount, email, name, phone, orderId) {
                   }
                 }
               };
-              
+
               const prefillName = "${name || ''}";
               const prefillEmail = "${email || ''}";
               const prefillPhone = "${phone || ''}";
-              
+
               if (prefillName) options.prefill.name = prefillName;
               if (prefillEmail) options.prefill.email = prefillEmail;
               if (prefillPhone) options.prefill.contact = prefillPhone;
-              
+
               const rzp = new Razorpay(options);
-              
+
               rzp.on('payment.failed', function (response) {
                 console.error('Razorpay Payment Failed details: ' + JSON.stringify(response.error));
                 window.ReactNativeWebView.postMessage(JSON.stringify({
@@ -151,7 +153,7 @@ function generateRazorpayHtml(keyId, amount, email, name, phone, orderId) {
                   error: response.error
                 }));
               });
-              
+
               rzp.open();
             } catch (err) {
               window.ReactNativeWebView.postMessage(JSON.stringify({
@@ -172,44 +174,31 @@ const PAYMENT_METHODS = [
     label: 'Razorpay Secure Checkout',
     sub: 'Pay via Cards, Netbanking, UPI, Wallets',
     icon: 'credit-card',
-    badge: 'Popular',
+    badge: 'Verified',
     type: 'razorpay',
   },
   {
     id: 'gpay',
     label: 'Google Pay',
-    sub: 'Direct instant settlement via GPay app',
+    sub: 'Direct UPI transfer (requires owner UTR verification)',
     icon: 'payment',
     type: 'direct_upi',
   },
   {
     id: 'phonepe',
     label: 'PhonePe',
-    sub: 'Direct pay via PhonePe app',
+    sub: 'Direct UPI transfer (requires owner UTR verification)',
     icon: 'smartphone',
     type: 'direct_upi',
   },
   {
     id: 'paytm',
     label: 'Paytm',
-    sub: 'Direct checkout via Paytm app',
+    sub: 'Direct UPI transfer (requires owner UTR verification)',
     icon: 'account-balance-wallet',
     type: 'direct_upi',
   },
 ];
-
-const OWNER_UPI_ID = 'tenura@upi';
-
-function buildUpiUrl(amount) {
-  const params = new URLSearchParams({
-    pa: OWNER_UPI_ID,
-    pn: 'Tenura',
-    am: String(amount),
-    cu: 'INR',
-    tn: 'Rent Payment',
-  });
-  return `upi://pay?${params.toString()}`;
-}
 
 export default function RentPaymentScreen({ navigation }) {
   const { colors } = useTheme();
@@ -217,26 +206,17 @@ export default function RentPaymentScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
 
-  const [tenantId, setTenantId] = useState(null);
   const [tenantPhone, setTenantPhone] = useState('');
   const [lease, setLease] = useState(null);
   const [payment, setPayment] = useState(null);
+  const [upiDestination, setUpiDestination] = useState(null);
   const [notSetUp, setNotSetUp] = useState(false);
+  const [noActiveLease, setNoActiveLease] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedMethod, setSelectedMethod] = useState('razorpay');
   const [paying, setPaying] = useState(false);
   const awaitingUpiReturn = useRef(false);
-
-  // Razorpay Simulation states
-  const [showRazorpayModal, setShowRazorpayModal] = useState(false);
-  const [selectedSubMethod, setSelectedSubMethod] = useState('card'); // 'card', 'upi', 'netbanking'
-  const [cardNumber, setCardNumber] = useState('');
-  const [expiry, setExpiry] = useState('');
-  const [cvv, setCvv] = useState('');
-  const [upiIdInput, setUpiIdInput] = useState('');
-  const [selectedBank, setSelectedBank] = useState('SBI');
-  const [razorpayPaying, setRazorpayPaying] = useState(false);
 
   // Real Razorpay WebView states
   const [showRealRazorpay, setShowRealRazorpay] = useState(false);
@@ -248,198 +228,88 @@ export default function RentPaymentScreen({ navigation }) {
   const [utrInput, setUtrInput] = useState('');
   const [submittingUtr, setSubmittingUtr] = useState(false);
 
+  const isDirectUpiVerified = Boolean(
+    upiDestination?.verified &&
+    upiDestination?.upi_id &&
+    upiDestination?.payee_name
+  );
+
   const fetchPayment = useCallback(async () => {
-    if (!user) return;
+    if (!user?.id) return;
     setError(null);
     setNotSetUp(false);
+    setNoActiveLease(false);
 
-    const { data: tenantRows, error: tErr } = await supabase
-      .from('tenants')
-      .select('id, phone')
-      .eq('user_id', user.id)
-      .limit(1);
-
-    if (tErr) {
-      setError(tErr.message);
+    const { data: obligationState, error: obErr } = await fetchCurrentRentObligation();
+    if (obErr || !obligationState) {
+      setError(obErr?.message || 'Unable to load rent obligation.');
       setLoading(false);
       return;
     }
 
-    const tenantData = tenantRows?.[0] ?? null;
-    if (!tenantData) {
-      setTenantId('mock-tenant-id');
-      setTenantPhone('9999999999');
-      setLease({ monthly_rent: 15000 });
-      setPayment({
-        id: 'mock-payment-id',
-        amount: 15000,
-        due_date: new Date().toISOString(),
-        status: 'pending'
-      });
-      setNotSetUp(false);
-      setLoading(false);
-      return;
-    }
-    setTenantId(tenantData.id);
-    setTenantPhone(tenantData.phone || '');
-
-    const dueDate = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-01`;
-
-    // Fetch active lease and any pending/overdue payment in parallel
-    const [leaseRes, paymentRes] = await Promise.all([
-      supabase
-        .from('leases')
-        .select('id, monthly_rent')
-        .eq('tenant_id', tenantData.id)
-        .eq('status', 'active')
-        .order('end_date', { ascending: false })
-        .limit(1),
-      supabase
-        .from('payments')
-        .select('*')
-        .eq('tenant_id', tenantData.id)
-        .in('status', ['pending', 'overdue'])
-        .order('due_date', { ascending: true })
-        .limit(1),
-    ]);
-
-    if (leaseRes.error) {
-      setError(leaseRes.error.message);
-      setLoading(false);
-      return;
-    }
-    if (paymentRes.error) {
-      setError(paymentRes.error.message);
+    if (obligationState.not_set_up || obligationState.status === 'no_tenant') {
+      setNotSetUp(true);
+      setLease(null);
+      setPayment(null);
+      setUpiDestination(null);
       setLoading(false);
       return;
     }
 
-    const leaseData = leaseRes.data?.[0] ?? null;
-    let paymentData = paymentRes.data?.[0] ?? null;
+    setTenantPhone(obligationState.tenant?.phone || '');
+    setLease(obligationState.lease || null);
+    setUpiDestination(obligationState.upi_destination || null);
 
-    // Auto-create a pending row only if no row at all exists for this due_date
-    if (!paymentData && leaseData) {
-      const { data: existing, error: existingErr } = await supabase
-        .from('payments')
-        .select('*')
-        .eq('tenant_id', tenantData.id)
-        .eq('due_date', dueDate)
-        .limit(1);
-
-      // If the query itself fails, skip insert to avoid a constraint crash
-      if (existingErr) {
-        setLease(leaseData);
-        setPayment(null);
-        setLoading(false);
-        return;
-      }
-
-      if (existing && existing.length > 0) {
-        // Row already exists — use it if still actionable, otherwise nothing due
-        const row = existing[0];
-        paymentData = (row.status === 'pending' || row.status === 'overdue') ? row : null;
-      } else {
-        const { data: newPayment, error: insertErr } = await supabase
-          .from('payments')
-          .insert({
-            tenant_id: tenantData.id,
-            lease_id: leaseData.id,
-            amount: leaseData.monthly_rent,
-            due_date: dueDate,
-            status: 'pending',
-          })
-          .select()
-          .single();
-
-        if (insertErr) {
-          if (insertErr.code === '23505') {
-            // Race condition: another screen inserted between our check and this insert.
-            // Re-fetch the row that won the race and use it if still actionable.
-            const { data: raceRows } = await supabase
-              .from('payments')
-              .select('*')
-              .eq('tenant_id', tenantData.id)
-              .eq('due_date', dueDate)
-              .limit(1);
-            const row = raceRows?.[0] ?? null;
-            paymentData = (row?.status === 'pending' || row?.status === 'overdue') ? row : null;
-          } else {
-            setError(insertErr.message);
-            setLoading(false);
-            return;
-          }
-        } else {
-          paymentData = newPayment;
-        }
-      }
+    if (obligationState.status === 'no_active_lease') {
+      setNoActiveLease(true);
+      setPayment(null);
+      setLoading(false);
+      return;
     }
 
-    // Reconcile any interrupted Razorpay checkout attempts if payment is still pending/overdue
-    if (paymentData && isValidPaymentUuid(paymentData.id) && (paymentData.status === 'pending' || paymentData.status === 'overdue')) {
+    let paymentData = obligationState.payment || null;
+
+    // Reconcile any interrupted Razorpay checkout attempts if an obligation is still outstanding
+    if (
+      paymentData &&
+      isValidPaymentUuid(paymentData.id) &&
+      ['pending', 'overdue', 'under_review', 'reversed'].includes(paymentData.status)
+    ) {
       const { data: reconData } = await reconcileRazorpayPayment({ paymentId: paymentData.id });
       if (reconData?.reconciled && reconData?.status === 'paid') {
         paymentData = null;
       }
     }
 
-    setLease(leaseData ?? { monthly_rent: 15000 });
-    setPayment(paymentData ?? (leaseData ? null : {
-      id: 'mock-payment-id',
-      amount: 15000,
-      due_date: new Date().toISOString(),
-      status: 'pending'
-    }));
+    setPayment(paymentData);
     setLoading(false);
 
-    if (paymentData?.due_date) {
+    if (paymentData?.due_date && (paymentData.status === 'pending' || paymentData.status === 'overdue')) {
       scheduleRentReminder({ amount: paymentData.amount, dueDate: paymentData.due_date });
     }
   }, [user?.id]);
 
-  useEffect(() => { fetchPayment(); }, [fetchPayment]);
+  useEffect(() => {
+    fetchPayment();
+  }, [fetchPayment]);
 
-  // Shared logic: write the paid row and navigate to success
-  const markPaymentPaid = useCallback(async (customTxnId) => {
-    const txnId = customTxnId || ('TXN' + Math.floor(Math.random() * 9_000_000_000 + 1_000_000_000));
-    const now = new Date().toISOString();
-
-    if (payment && payment.id === 'mock-payment-id') {
-      setPaying(false);
-      showPaymentConfirmed({ amount: payment.amount, method: selectedMethod });
-      navigation.navigate('PaymentSuccess', {
-        amount: payment.amount,
-        method: selectedMethod,
-        txnId,
-        paidAt: now,
-      });
-      return;
-    }
-
-    const { error: dbError } = await supabase
-      .from('payments')
-      .update({
-        status: 'paid',
-        paid_at: now,
-        payment_method: selectedMethod,
-        transaction_id: txnId,
-      })
-      .eq('id', payment.id);
-
-    setPaying(false);
-
-    if (dbError) {
-      setError(dbError.message);
-      return;
-    }
-
-    showPaymentConfirmed({ amount: payment.amount, method: selectedMethod });
+  const navigateToConfirmedSuccess = useCallback(({
+    paymentId,
+    amount,
+    method,
+    txnId,
+    paidAt,
+  }) => {
+    showPaymentConfirmed({ amount, method });
     navigation.navigate('PaymentSuccess', {
-      amount: payment.amount,
-      method: selectedMethod,
+      paymentId,
+      amount,
+      method,
       txnId,
-      paidAt: now,
+      paidAt,
+      verifiedSettlement: true,
     });
-  }, [payment, selectedMethod, navigation]);
+  }, [navigation]);
 
   const reconcileInterruptedCheckout = useCallback(async (orderIdOverride = null) => {
     if (!payment || !isValidPaymentUuid(payment.id)) {
@@ -457,13 +327,13 @@ export default function RentPaymentScreen({ navigation }) {
       activeOrderIdRef.current = null;
       setPaying(false);
       const settledAmount = Number(reconData.amount ?? payment.amount);
-      const txnId = reconData.transactionId || orderToCheck || 'RAZORPAY';
+      const txnId = reconData.transactionId || orderToCheck;
       const paidAt = reconData.paidAt || new Date().toISOString();
 
-      showPaymentConfirmed({ amount: settledAmount, method: selectedMethod });
-      navigation.navigate('PaymentSuccess', {
+      navigateToConfirmedSuccess({
+        paymentId: reconData.paymentId || payment.id,
         amount: settledAmount,
-        method: selectedMethod,
+        method: 'razorpay',
         txnId,
         paidAt,
       });
@@ -472,93 +342,83 @@ export default function RentPaymentScreen({ navigation }) {
 
     setPaying(false);
     return false;
-  }, [payment, selectedMethod, navigation]);
+  }, [payment, navigateToConfirmedSuccess]);
 
-  const verifyRazorpayPayment = useCallback(async (orderId, paymentId, signature) => {
-    setPaying(true);
-
-    // Bypassing verification for mock payments to prevent DB UUID casting error
-    if (payment && payment.id === 'mock-payment-id') {
+  const verifyRazorpayPayment = useCallback(async (orderId, razorpayPaymentId, signature) => {
+    if (!payment || !isValidPaymentUuid(payment.id)) {
       setPaying(false);
-      const txnId = paymentId || ('TXN' + Math.floor(Math.random() * 9_000_000_000 + 1_000_000_000));
-      const now = new Date().toISOString();
-      showPaymentConfirmed({ amount: payment.amount, method: selectedMethod });
-      navigation.navigate('PaymentSuccess', {
-        amount: payment.amount,
-        method: selectedMethod,
-        txnId,
-        paidAt: now,
-      });
+      Alert.alert('Invalid Obligation', 'No valid server rent obligation found to verify.');
       return;
     }
+
+    setPaying(true);
 
     try {
       const { data: funcData, error: funcError } = await verifyRazorpayCheckout({
         orderId,
-        razorpayPaymentId: paymentId,
+        razorpayPaymentId,
         signature,
         paymentId: payment.id,
       });
 
-      if (funcError || !funcData) {
-        // Attempt server-side reconciliation in case callback was interrupted after capture
+      if (funcError || !funcData || !funcData.success) {
         const reconciled = await reconcileInterruptedCheckout(orderId);
         if (reconciled) return;
-        throw funcError || new Error('Verification failed.');
+        throw funcError || new Error('Server payment verification failed.');
       }
 
       activeOrderIdRef.current = null;
       setPaying(false);
       const settledAmount = Number(funcData.amount ?? payment.amount);
-      const txnId = funcData.transactionId || paymentId;
+      const txnId = funcData.transactionId || razorpayPaymentId;
       const paidAt = funcData.paidAt || new Date().toISOString();
 
-      showPaymentConfirmed({ amount: settledAmount, method: selectedMethod });
-      navigation.navigate('PaymentSuccess', {
+      navigateToConfirmedSuccess({
+        paymentId: funcData.paymentId || payment.id,
         amount: settledAmount,
-        method: selectedMethod,
+        method: 'razorpay',
         txnId,
         paidAt,
       });
     } catch (err) {
       setPaying(false);
       Alert.alert(
-        'Verification Error',
-        `Payment succeeded but verification failed: ${err.message}`
+        'Verification Pending',
+        `Your payment could not be verified immediately (${err.message}). If money was debited, it will reconcile automatically.`
       );
     }
-  }, [payment, selectedMethod, navigation, reconcileInterruptedCheckout]);
+  }, [payment, reconcileInterruptedCheckout, navigateToConfirmedSuccess]);
 
-  // When the user returns from their UPI app, confirm if they completed payment instead of auto-marking paid
+  // Reconcile interrupted Razorpay checkout or prompt UTR entry when app returns to foreground
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextState) => {
-      if (nextState === 'active' && awaitingUpiReturn.current) {
-        awaitingUpiReturn.current = false;
-        setPaying(false);
-        Alert.alert(
-          'Confirm Payment',
-          'Did you complete the payment in your UPI app?',
-          [
-            {
-              text: 'No, Cancelled',
-              style: 'cancel',
-              onPress: () => {
-                setPaying(false);
+      if (nextState === 'active') {
+        if (awaitingUpiReturn.current) {
+          awaitingUpiReturn.current = false;
+          setPaying(false);
+          Alert.alert(
+            'Submit UPI Reference (UTR)',
+            'If you completed the transfer in your UPI app, enter the 12-digit UTR number so the property owner can verify and settle your payment.',
+            [
+              {
+                text: 'Not Paid / Cancelled',
+                style: 'cancel',
+                onPress: () => setPaying(false),
               },
-            },
-            {
-              text: 'Yes, I Paid',
-              onPress: () => {
-                setShowUtrModal(true);
+              {
+                text: 'Enter UTR Reference',
+                onPress: () => setShowUtrModal(true),
               },
-            },
-          ],
-          { cancelable: false }
-        );
+            ],
+            { cancelable: false }
+          );
+        } else if (activeOrderIdRef.current && !showRealRazorpay) {
+          reconcileInterruptedCheckout(activeOrderIdRef.current);
+        }
       }
     });
     return () => subscription.remove();
-  }, []);
+  }, [reconcileInterruptedCheckout, showRealRazorpay]);
 
   const handleUtrSubmit = async () => {
     const trimmedUtr = utrInput.trim();
@@ -567,49 +427,31 @@ export default function RentPaymentScreen({ navigation }) {
       return;
     }
 
-    setSubmittingUtr(true);
-    const now = new Date().toISOString();
-
-    if (payment && payment.id === 'mock-payment-id') {
-      setSubmittingUtr(false);
-      setShowUtrModal(false);
-      setUtrInput('');
-      navigation.navigate('PaymentSuccess', {
-        amount: payment.amount,
-        method: selectedMethod,
-        txnId: 'UPI-' + trimmedUtr,
-        paidAt: now,
-      });
+    if (!payment || !isValidPaymentUuid(payment.id)) {
+      Alert.alert('Unavailable', 'No active rent obligation found.');
       return;
     }
 
+    setSubmittingUtr(true);
+
     try {
-      const { data: rpcResult, error: rpcErr } = await supabase.rpc('submit_upi_payment', {
-        p_payment_id: payment.id,
-        p_utr_number: trimmedUtr,
-        p_payment_method: selectedMethod,
+      const { data: rpcResult, error: rpcErr } = await submitUpiReference({
+        paymentId: payment.id,
+        utrNumber: trimmedUtr,
+        paymentMethod: selectedMethod,
       });
 
-      if (rpcErr) throw rpcErr;
+      if (rpcErr || !rpcResult) {
+        throw rpcErr || new Error('Could not record UPI reference.');
+      }
 
       setShowUtrModal(false);
       setUtrInput('');
+      await fetchPayment();
+
       Alert.alert(
-        'Payment Submitted',
-        `Your payment of ₹${payment.amount?.toLocaleString('en-IN')} has been submitted with reference ${trimmedUtr} and is under review by the property owner.`,
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              navigation.navigate('PaymentSuccess', {
-                amount: payment.amount,
-                method: selectedMethod,
-                txnId: 'UPI-' + trimmedUtr,
-                paidAt: now,
-              });
-            },
-          },
-        ]
+        'Submitted for Owner Review',
+        `Reference ${rpcResult.utr_number || trimmedUtr} has been recorded as Under Review. Your rent obligation remains outstanding until the property owner verifies bank settlement, after which your paid receipt will be issued.`
       );
     } catch (err) {
       Alert.alert('Submission Error', err.message || 'Could not record UPI payment reference.');
@@ -629,30 +471,24 @@ export default function RentPaymentScreen({ navigation }) {
   };
 
   const handleConfirmPay = async () => {
-    if (!payment) return;
+    if (!payment || !isValidPaymentUuid(payment.id)) {
+      Alert.alert('No Rent Obligation', 'There is no payable rent obligation to settle.');
+      return;
+    }
 
     if (selectedMethod === 'razorpay') {
       const keyId = process.env.EXPO_PUBLIC_RAZORPAY_KEY_ID;
-      
-      if (!keyId || keyId === 'rzp_test_defaultKeyId' || !isValidPaymentUuid(payment.id)) {
-        // Fallback to mock simulation modal if no real Key ID is configured in .env or using demo mock obligation
+
+      if (!keyId || keyId === 'rzp_test_defaultKeyId') {
         Alert.alert(
-          'API Key Required',
-          'To test real Razorpay checkouts, add EXPO_PUBLIC_RAZORPAY_KEY_ID=rzp_test_... to your .env file.\n\nOpening the interactive simulator instead.',
-          [{ text: 'OK', onPress: () => {
-            setCardNumber('');
-            setExpiry('');
-            setCvv('');
-            setUpiIdInput('');
-            setShowRazorpayModal(true);
-          }}]
+          'Payment Gateway Not Configured',
+          'Razorpay checkout is unavailable because EXPO_PUBLIC_RAZORPAY_KEY_ID is not configured. Please contact support or your property manager.'
         );
         return;
       }
 
-      // Key ID is configured! Launch the real WebView Checkout
       setPaying(true);
-      
+
       try {
         const { data: funcData, error: funcError } = await createRazorpayOrder(payment.id);
 
@@ -665,13 +501,13 @@ export default function RentPaymentScreen({ navigation }) {
           activeOrderIdRef.current = null;
           setPaying(false);
           const settledAmount = Number(funcData.verifiedAmount ?? payment.amount);
-          const txnId = funcData.transactionId || funcData.razorpayPaymentId || funcData.orderId || 'RAZORPAY';
+          const txnId = funcData.transactionId || funcData.razorpayPaymentId || funcData.orderId;
           const paidAt = funcData.paidAt || new Date().toISOString();
 
-          showPaymentConfirmed({ amount: settledAmount, method: selectedMethod });
-          navigation.navigate('PaymentSuccess', {
+          navigateToConfirmedSuccess({
+            paymentId: funcData.paymentId || payment.id,
             amount: settledAmount,
-            method: selectedMethod,
+            method: 'razorpay',
             txnId,
             paidAt,
           });
@@ -683,8 +519,8 @@ export default function RentPaymentScreen({ navigation }) {
         activeOrderIdRef.current = orderId;
         const email = user.email || '';
         const name = user.user_metadata?.full_name || 'Tenant';
-        const phone = tenantPhone || '9999999999';
-        
+        const phone = tenantPhone || '';
+
         const html = generateRazorpayHtml(keyId, verifiedAmount, email, name, phone, orderId);
         setRazorpayHtml(html);
         setShowRealRazorpay(true);
@@ -698,18 +534,25 @@ export default function RentPaymentScreen({ navigation }) {
       return;
     }
 
-    // Direct UPI Flow
+    // Direct UPI Flow: block unless property has a verified UPI destination configured by the owner
+    if (!isDirectUpiVerified) {
+      Alert.alert(
+        'Direct UPI Not Configured',
+        'Your property owner has not configured a verified UPI destination for this property yet. Please pay using Razorpay Secure Checkout.'
+      );
+      return;
+    }
+
     setPaying(true);
     const { opened } = await openPhoneUpiApp({
       appId: selectedMethod,
-      upiId: OWNER_UPI_ID,
-      payeeName: 'Tenura',
+      upiId: upiDestination.upi_id,
+      payeeName: upiDestination.payee_name,
       amount: payment.amount,
-      transactionNote: 'Rent Payment',
+      transactionNote: `Rent Payment ${payment.id.slice(0, 8)}`,
     });
 
     if (opened) {
-      // Hand off to UPI app; markPaymentPaid fires when user returns via AppState listener
       awaitingUpiReturn.current = true;
     } else {
       setPaying(false);
@@ -717,45 +560,9 @@ export default function RentPaymentScreen({ navigation }) {
       const label = methodObj ? methodObj.label : 'UPI App';
       Alert.alert(
         'App Not Installed',
-        `The ${label} app is not installed on this device. Please install it or select another payment option (like Razorpay Secure Checkout).`
+        `The ${label} app is not installed on this device. Please install it or use Razorpay Secure Checkout.`
       );
     }
-  };
-
-  const handleRazorpaySubmit = async () => {
-    if (selectedSubMethod === 'card') {
-      if (!cardNumber || cardNumber.replace(/\s/g, '').length < 16) {
-        Alert.alert('Invalid Card Details', 'Please enter a valid 16-digit card number.');
-        return;
-      }
-      if (!expiry || !expiry.includes('/')) {
-        Alert.alert('Invalid Card Details', 'Please enter card expiry date (MM/YY).');
-        return;
-      }
-      if (!cvv || cvv.length < 3) {
-        Alert.alert('Invalid Card Details', 'Please enter card CVV (3 digits).');
-        return;
-      }
-    } else if (selectedSubMethod === 'upi') {
-      if (!upiIdInput || !upiIdInput.includes('@')) {
-        Alert.alert('Invalid UPI ID', 'Please enter a valid UPI ID (e.g., username@bank).');
-        return;
-      }
-    }
-
-    setRazorpayPaying(true);
-    // Simulate transaction delay
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    setRazorpayPaying(false);
-    setShowRazorpayModal(false);
-
-    setPaying(true);
-    await markPaymentPaid();
-  };
-
-  const simulatePay = async () => {
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    await markPaymentPaid();
   };
 
   if (loading) {
@@ -794,6 +601,21 @@ export default function RentPaymentScreen({ navigation }) {
     );
   }
 
+  if (noActiveLease) {
+    return (
+      <View style={styles.container}>
+        <ScreenHeader title="Payments" showBell />
+        <View style={styles.centered}>
+          <MaterialIcons name="description" size={48} color={colors.outline} />
+          <Text style={styles.noDueTitle}>No active lease</Text>
+          <Text style={styles.noDueSubtitle}>
+            Rent checkout is enabled only when an active lease is assigned to your unit.
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
   if (!payment) {
     return (
       <View style={styles.container}>
@@ -801,14 +623,14 @@ export default function RentPaymentScreen({ navigation }) {
         <View style={styles.centered}>
           <MaterialIcons name="check-circle" size={48} color={colors.tertiaryFixedDim} />
           <Text style={styles.noDueTitle}>No payment due</Text>
-          <Text style={styles.noDueSubtitle}>You're all caught up on rent payments.</Text>
+          <Text style={styles.noDueSubtitle}>You're all caught up on confirmed rent payments.</Text>
         </View>
       </View>
     );
   }
 
   const getCtaLabel = () => {
-    const amountStr = `₹${Number(payment?.amount ?? lease?.monthly_rent ?? 0).toLocaleString('en-IN')}`;
+    const amountStr = `₹${Number(payment?.amount ?? 0).toLocaleString('en-IN')}`;
     if (selectedMethod === 'razorpay') {
       return `Pay via Razorpay • ${amountStr}`;
     }
@@ -819,11 +641,12 @@ export default function RentPaymentScreen({ navigation }) {
 
   const getCtaSubtext = () => {
     if (selectedMethod === 'razorpay') {
-      return 'Secured by Razorpay. Supports Cards, Netbanking, UPI & Wallets.';
+      return 'Server-verified settlement via Razorpay. Paid receipt issued only after provider capture.';
     }
-    const methodObj = PAYMENT_METHODS.find(m => m.id === selectedMethod);
-    const label = methodObj ? methodObj.label : 'UPI App';
-    return `Opens ${label} app directly to complete payment.`;
+    if (!isDirectUpiVerified) {
+      return 'Direct UPI is disabled until the property owner configures a verified UPI payee.';
+    }
+    return `Pays ${upiDestination.payee_name} (${upiDestination.upi_id}). Remains under review until owner confirms bank credit.`;
   };
 
   return (
@@ -835,16 +658,32 @@ export default function RentPaymentScreen({ navigation }) {
       >
         {/* Amount */}
         <View style={styles.amountSection}>
-          <Text style={styles.amountLabel}>TOTAL RENT DUE</Text>
+          <Text style={styles.amountLabel}>
+            {payment.status === 'under_review'
+              ? 'OUTSTANDING RENT (UNDER OWNER REVIEW)'
+              : payment.status === 'reversed'
+              ? 'OUTSTANDING RENT (PREVIOUS PAYMENT REVERSED)'
+              : 'TOTAL RENT DUE'}
+          </Text>
           <Text style={styles.amountValue}>
-            ₹{Number(payment?.amount ?? lease?.monthly_rent ?? 0).toLocaleString('en-IN')}
+            ₹{Number(payment?.amount ?? 0).toLocaleString('en-IN')}
           </Text>
           <Text style={styles.amountCurrency}>Current currency: Indian Rupees (₹)</Text>
           {payment?.due_date ? (
             <View style={styles.dueRow}>
               <StatusChip
-                label={daysUntilDue(payment.due_date)}
-                variant={payment.status === 'overdue' ? 'urgent' : 'pending'}
+                label={
+                  payment.status === 'under_review'
+                    ? 'Under Review (UTR Submitted)'
+                    : payment.status === 'reversed'
+                    ? 'Reversed — Payment Due'
+                    : daysUntilDue(payment.due_date)
+                }
+                variant={
+                  payment.status === 'overdue' || payment.status === 'reversed'
+                    ? 'urgent'
+                    : 'pending'
+                }
               />
               <Text style={styles.dueDateText}>
                 Due {new Date(payment.due_date).toLocaleDateString('en-IN', {
@@ -852,12 +691,58 @@ export default function RentPaymentScreen({ navigation }) {
                 })}
               </Text>
             </View>
-          ) : (
-            <View style={styles.dueRow}>
-              <StatusChip label="Due this month" variant="pending" />
-            </View>
-          )}
+          ) : null}
         </View>
+
+        {/* Under Review / Rejected UTR / Reversed Status Banner */}
+        {payment.status === 'under_review' && (
+          <View style={styles.reviewBanner}>
+            <MaterialIcons name="schedule" size={20} color="#B45309" />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.reviewBannerTitle}>UPI Reference Under Review</Text>
+              <Text style={styles.reviewBannerText}>
+                Submitted UTR: {payment.utr_number || 'Pending'}. This rent obligation remains outstanding until the property owner verifies bank receipt. You can update the UTR below or pay instantly via Razorpay.
+              </Text>
+              <TouchableOpacity
+                style={styles.updateUtrBtn}
+                onPress={() => {
+                  setUtrInput(payment.utr_number || '');
+                  setShowUtrModal(true);
+                }}
+              >
+                <Text style={styles.updateUtrBtnText}>Update UTR Number</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
+        {payment.status !== 'under_review' && payment.last_rejected_utr && (
+          <View style={[styles.reviewBanner, { backgroundColor: '#FEF2F2', borderColor: '#FCA5A5' }]}>
+            <MaterialIcons name="error-outline" size={20} color={colors.error} />
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.reviewBannerTitle, { color: colors.error }]}>
+                Previous UPI Reference Rejected ({payment.last_rejected_utr})
+              </Text>
+              <Text style={[styles.reviewBannerText, { color: colors.onSurfaceVariant }]}>
+                {payment.review_notes || 'The property owner could not verify this UTR in their bank statement. Your rent remains due.'}
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {payment.status === 'reversed' && (
+          <View style={[styles.reviewBanner, { backgroundColor: '#FEF2F2', borderColor: '#FCA5A5' }]}>
+            <MaterialIcons name="history" size={20} color={colors.error} />
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.reviewBannerTitle, { color: colors.error }]}>
+                Previous Settlement Reversed
+              </Text>
+              <Text style={[styles.reviewBannerText, { color: colors.onSurfaceVariant }]}>
+                {payment.reversal_reason || 'The prior payment settlement was reversed and remains due.'}
+              </Text>
+            </View>
+          </View>
+        )}
 
         {/* Switch to Water & Electricity Bills Banner */}
         <TouchableOpacity
@@ -884,7 +769,7 @@ export default function RentPaymentScreen({ navigation }) {
           <Text style={styles.methodsTitle}>Select Payment Option</Text>
 
           {/* Section: Standard Gateway */}
-          <Text style={styles.sectionHeader}>PAYMENT GATEWAY</Text>
+          <Text style={styles.sectionHeader}>INSTANT VERIFIED GATEWAY</Text>
           {PAYMENT_METHODS.filter(m => m.type === 'razorpay').map(method => (
             <TouchableOpacity
               key={method.id}
@@ -913,33 +798,61 @@ export default function RentPaymentScreen({ navigation }) {
           ))}
 
           {/* Section: Direct UPI */}
-          <Text style={[styles.sectionHeader, { marginTop: 16 }]}>DIRECT UPI APP OPENING</Text>
-          {PAYMENT_METHODS.filter(m => m.type === 'direct_upi').map(method => (
-            <TouchableOpacity
-              key={method.id}
-              style={[styles.methodCard, selectedMethod === method.id && styles.methodCardActive]}
-              onPress={() => setSelectedMethod(method.id)}
-              activeOpacity={0.8}
-            >
-              <View style={styles.methodIconBg}>
-                <MaterialIcons name={method.icon} size={22} color={colors.primary} />
-              </View>
-              <View style={styles.methodInfo}>
-                <Text style={styles.methodLabel}>{method.label}</Text>
-                <Text style={styles.methodSub}>{method.sub}</Text>
-              </View>
-              <View style={[styles.radioOuter, selectedMethod === method.id && styles.radioOuterActive]}>
-                {selectedMethod === method.id ? <View style={styles.radioInner} /> : null}
-              </View>
-            </TouchableOpacity>
-          ))}
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 16 }}>
+            <Text style={styles.sectionHeader}>DIRECT UPI TRANSFER (OWNER REVIEW)</Text>
+            {!isDirectUpiVerified && (
+              <Text style={styles.disabledTag}>Not Configured by Owner</Text>
+            )}
+          </View>
+          {isDirectUpiVerified && (
+            <Text style={styles.verifiedPayeeNote}>
+              Verified Payee: {upiDestination.payee_name} ({upiDestination.upi_id})
+            </Text>
+          )}
+          {PAYMENT_METHODS.filter(m => m.type === 'direct_upi').map(method => {
+            const disabled = !isDirectUpiVerified;
+            return (
+              <TouchableOpacity
+                key={method.id}
+                style={[
+                  styles.methodCard,
+                  selectedMethod === method.id && styles.methodCardActive,
+                  disabled && { opacity: 0.48 },
+                ]}
+                onPress={() => {
+                  if (disabled) {
+                    Alert.alert(
+                      'Direct UPI Disabled',
+                      'Direct UPI is disabled for this property until the owner configures a verified UPI payee ID. Please use Razorpay Secure Checkout.'
+                    );
+                    return;
+                  }
+                  setSelectedMethod(method.id);
+                }}
+                activeOpacity={0.8}
+              >
+                <View style={styles.methodIconBg}>
+                  <MaterialIcons name={method.icon} size={22} color={colors.primary} />
+                </View>
+                <View style={styles.methodInfo}>
+                  <Text style={styles.methodLabel}>{method.label}</Text>
+                  <Text style={styles.methodSub}>
+                    {disabled ? 'Requires verified owner UPI destination' : method.sub}
+                  </Text>
+                </View>
+                <View style={[styles.radioOuter, selectedMethod === method.id && styles.radioOuterActive]}>
+                  {selectedMethod === method.id ? <View style={styles.radioInner} /> : null}
+                </View>
+              </TouchableOpacity>
+            );
+          })}
         </View>
 
         {/* Security badge */}
         <View style={styles.securitySection}>
           <View style={styles.securityBadge}>
             <MaterialIcons name="verified-user" size={16} color={colors.tertiaryFixedDim} />
-            <Text style={styles.securityText}>100% Secure Payments</Text>
+            <Text style={styles.securityText}>100% Server-Verified Settlement</Text>
           </View>
           <Text style={styles.securitySubtext}>PCI-DSS Compliant & End-to-End Encrypted</Text>
         </View>
@@ -950,6 +863,7 @@ export default function RentPaymentScreen({ navigation }) {
             label={getCtaLabel()}
             onPress={handleConfirmPay}
             loading={paying}
+            disabled={paying || (selectedMethod !== 'razorpay' && !isDirectUpiVerified)}
             icon="lock"
           />
           <Text style={styles.mockNote}>
@@ -957,240 +871,6 @@ export default function RentPaymentScreen({ navigation }) {
           </Text>
         </View>
       </ScrollView>
-
-      {/* Razorpay Simulation Modal */}
-      <Modal
-        visible={showRazorpayModal}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => {
-          if (!razorpayPaying) setShowRazorpayModal(false);
-        }}
-      >
-        <Pressable 
-          style={styles.modalBackdrop} 
-          onPress={() => {
-            if (!razorpayPaying) setShowRazorpayModal(false);
-          }}
-        >
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            style={styles.modalKeyboardAvoiding}
-          >
-            <Pressable style={styles.rzpContainer} onPress={(e) => e.stopPropagation()}>
-              {/* Header */}
-              <View style={styles.rzpHeader}>
-                <View>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <Text style={styles.rzpBrandLogo}>⚡</Text>
-                    <Text style={styles.rzpBrandName}>Razorpay</Text>
-                    <View style={styles.rzpSecureBadge}>
-                      <Text style={styles.rzpSecureBadgeText}>SECURE</Text>
-                    </View>
-                  </View>
-                  <Text style={styles.rzpMerchantName}>Tenura Property Solutions</Text>
-                </View>
-                <TouchableOpacity 
-                  disabled={razorpayPaying}
-                  onPress={() => setShowRazorpayModal(false)}
-                  style={styles.rzpCloseBtn}
-                >
-                  <MaterialIcons name="close" size={20} color="#666" />
-                </TouchableOpacity>
-              </View>
-
-              {/* Amount Display */}
-              <View style={styles.rzpAmountContainer}>
-                <Text style={styles.rzpAmountLabel}>Amount to pay</Text>
-                <Text style={styles.rzpAmountText}>
-                  ₹{Number(payment?.amount ?? lease?.monthly_rent ?? 0).toLocaleString('en-IN')}
-                </Text>
-              </View>
-
-              {/* Sub-Methods Tabs */}
-              <View style={styles.rzpTabs}>
-                <TouchableOpacity
-                  style={[styles.rzpTab, selectedSubMethod === 'card' && styles.rzpTabActive]}
-                  onPress={() => setSelectedSubMethod('card')}
-                  disabled={razorpayPaying}
-                >
-                  <MaterialIcons name="credit-card" size={18} color={selectedSubMethod === 'card' ? '#3399cc' : '#666'} />
-                  <Text style={[styles.rzpTabText, selectedSubMethod === 'card' && styles.rzpTabActiveText]}>Card</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.rzpTab, selectedSubMethod === 'upi' && styles.rzpTabActive]}
-                  onPress={() => setSelectedSubMethod('upi')}
-                  disabled={razorpayPaying}
-                >
-                  <MaterialIcons name="qr-code" size={18} color={selectedSubMethod === 'upi' ? '#3399cc' : '#666'} />
-                  <Text style={[styles.rzpTabText, selectedSubMethod === 'upi' && styles.rzpTabActiveText]}>UPI</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.rzpTab, selectedSubMethod === 'netbanking' && styles.rzpTabActive]}
-                  onPress={() => setSelectedSubMethod('netbanking')}
-                  disabled={razorpayPaying}
-                >
-                  <MaterialIcons name="account-balance" size={18} color={selectedSubMethod === 'netbanking' ? '#3399cc' : '#666'} />
-                  <Text style={[styles.rzpTabText, selectedSubMethod === 'netbanking' && styles.rzpTabActiveText]}>Net Banking</Text>
-                </TouchableOpacity>
-              </View>
-
-              {/* Sub-Method Forms */}
-              <View style={styles.rzpBody}>
-                {selectedSubMethod === 'card' && (
-                  <View>
-                    <View style={styles.rzpInputGroup}>
-                      <Text style={styles.rzpInputLabel}>CARD NUMBER</Text>
-                      <TextInput
-                        style={styles.rzpInput}
-                        placeholder="1234 5678 1234 5678"
-                        placeholderTextColor="#aaa"
-                        keyboardType="number-pad"
-                        maxLength={19}
-                        value={cardNumber}
-                        onChangeText={(txt) => {
-                          const clean = txt.replace(/\D/g, '');
-                          const formatted = clean.match(/.{1,4}/g)?.join(' ') || clean;
-                          setCardNumber(formatted);
-                        }}
-                        editable={!razorpayPaying}
-                      />
-                    </View>
-
-                    <View style={{ flexDirection: 'row', gap: 12, marginTop: 12 }}>
-                      <View style={[styles.rzpInputGroup, { flex: 1 }]}>
-                        <Text style={styles.rzpInputLabel}>EXPIRY</Text>
-                        <TextInput
-                          style={styles.rzpInput}
-                          placeholder="MM/YY"
-                          placeholderTextColor="#aaa"
-                          keyboardType="number-pad"
-                          maxLength={5}
-                          value={expiry}
-                          onChangeText={(txt) => {
-                            const clean = txt.replace(/\D/g, '');
-                            if (clean.length > 2) {
-                              setExpiry(clean.slice(0, 2) + '/' + clean.slice(2, 4));
-                            } else {
-                              setExpiry(clean);
-                            }
-                          }}
-                          editable={!razorpayPaying}
-                        />
-                      </View>
-                      <View style={[styles.rzpInputGroup, { flex: 1 }]}>
-                        <Text style={styles.rzpInputLabel}>CVV</Text>
-                        <TextInput
-                          style={styles.rzpInput}
-                          placeholder="123"
-                          placeholderTextColor="#aaa"
-                          keyboardType="number-pad"
-                          secureTextEntry={true}
-                          maxLength={3}
-                          value={cvv}
-                          onChangeText={setCvv}
-                          editable={!razorpayPaying}
-                        />
-                      </View>
-                    </View>
-                  </View>
-                )}
-
-                {selectedSubMethod === 'upi' && (
-                  <View>
-                    <View style={styles.rzpInputGroup}>
-                      <Text style={styles.rzpInputLabel}>UPI ID (VPA)</Text>
-                      <TextInput
-                        style={styles.rzpInput}
-                        placeholder="username@bank"
-                        placeholderTextColor="#aaa"
-                        autoCapitalize="none"
-                        value={upiIdInput}
-                        onChangeText={setUpiIdInput}
-                        editable={!razorpayPaying}
-                      />
-                    </View>
-                    
-                    {/* Quick UPI suffixes */}
-                    <View style={styles.rzpSuffixRow}>
-                      {['@okhdfcbank', '@okaxis', '@okicici', '@ybl'].map((suffix) => (
-                        <TouchableOpacity
-                          key={suffix}
-                          style={styles.rzpSuffixBtn}
-                          onPress={() => {
-                            const base = upiIdInput.split('@')[0] || '';
-                            setUpiIdInput(base + suffix);
-                          }}
-                          disabled={razorpayPaying}
-                        >
-                          <Text style={styles.rzpSuffixBtnText}>{suffix}</Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  </View>
-                )}
-
-                {selectedSubMethod === 'netbanking' && (
-                  <View>
-                    <Text style={styles.rzpInputLabel}>POPULAR BANKS</Text>
-                    <View style={styles.rzpBanksGrid}>
-                      {[
-                        { code: 'SBI', name: 'SBI' },
-                        { code: 'HDFC', name: 'HDFC' },
-                        { code: 'ICICI', name: 'ICICI' },
-                        { code: 'AXIS', name: 'Axis' },
-                      ].map((bank) => (
-                        <TouchableOpacity
-                          key={bank.code}
-                          style={[
-                            styles.rzpBankCard,
-                            selectedBank === bank.code && styles.rzpBankCardActive
-                          ]}
-                          onPress={() => setSelectedBank(bank.code)}
-                          disabled={razorpayPaying}
-                        >
-                          <Text style={[
-                            styles.rzpBankText,
-                            selectedBank === bank.code && styles.rzpBankTextActive
-                          ]}>
-                            {bank.name}
-                          </Text>
-                          {selectedBank === bank.code && (
-                            <MaterialIcons name="check-circle" size={14} color="#3399cc" />
-                          )}
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  </View>
-                )}
-              </View>
-
-              {/* Pay Button */}
-              <RateLimitedButton
-                style={styles.rzpPayBtn}
-                onPress={handleRazorpaySubmit}
-                disabled={razorpayPaying}
-              >
-                {razorpayPaying ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <Text style={styles.rzpPayBtnText}>
-                    Pay ₹{Number(payment?.amount ?? lease?.monthly_rent ?? 0).toLocaleString('en-IN')}
-                  </Text>
-                )}
-              </RateLimitedButton>
-
-              {/* Footer */}
-              <View style={styles.rzpFooter}>
-                <MaterialIcons name="verified-user" size={14} color="#aaa" />
-                <Text style={styles.rzpFooterText}>Secured by Razorpay • PCI-DSS Compliant</Text>
-              </View>
-            </Pressable>
-          </KeyboardAvoidingView>
-        </Pressable>
-      </Modal>
 
       {/* Real Razorpay WebView Modal */}
       <Modal
@@ -1202,9 +882,8 @@ export default function RentPaymentScreen({ navigation }) {
         }}
       >
         <View style={{ flex: 1, paddingTop: insets.top, backgroundColor: '#fff' }}>
-          {/* Header */}
           <View style={styles.webViewHeader}>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.webViewCloseBtn}
               onPress={() => {
                 setShowRealRazorpay(false);
@@ -1216,11 +895,11 @@ export default function RentPaymentScreen({ navigation }) {
             <Text style={styles.webViewHeaderTitle}>Razorpay Secure Checkout</Text>
             <View style={{ width: 24 }} />
           </View>
-          
+
           <WebView
             originWhitelist={['https://*', 'upi://*', 'about:*']}
             source={{ html: razorpayHtml, baseUrl: 'https://olswwdunaivwxefelasc.supabase.co' }}
-            onMessage={(event) => {
+            onMessage={async (event) => {
               try {
                 const data = JSON.parse(event.nativeEvent.data);
                 if (data.status === 'console_log') {
@@ -1233,26 +912,53 @@ export default function RentPaymentScreen({ navigation }) {
                 }
                 if (data.status === 'success') {
                   setShowRealRazorpay(false);
-                  verifyRazorpayPayment(data.razorpay_order_id, data.razorpay_payment_id, data.razorpay_signature);
+                  verifyRazorpayPayment(
+                    data.razorpay_order_id,
+                    data.razorpay_payment_id,
+                    data.razorpay_signature
+                  );
                 } else if (data.status === 'dismissed') {
                   setShowRealRazorpay(false);
-                  reconcileInterruptedCheckout();
+                  await reconcileInterruptedCheckout();
                 } else if (data.status === 'failed') {
                   setShowRealRazorpay(false);
+                  const currentOrderId = activeOrderIdRef.current;
+                  const reason = data.error?.description || 'Payment failed in checkout';
+                  const { data: failResult } = await reportRazorpayAttemptFailed({
+                    orderId: currentOrderId,
+                    reason,
+                  });
+                  if (failResult?.reconciled && failResult?.status === 'paid') {
+                    activeOrderIdRef.current = null;
+                    setPaying(false);
+                    navigateToConfirmedSuccess({
+                      paymentId: failResult.paymentId || payment.id,
+                      amount: Number(failResult.amount ?? payment.amount),
+                      method: 'razorpay',
+                      txnId: failResult.transactionId || currentOrderId,
+                      paidAt: failResult.paidAt || new Date().toISOString(),
+                    });
+                    return;
+                  }
+                  activeOrderIdRef.current = null;
                   setPaying(false);
-                  Alert.alert('Payment Failed', data.error?.description || 'The payment transaction failed.');
+                  Alert.alert('Payment Failed', reason);
                 } else if (data.status === 'error') {
                   setShowRealRazorpay(false);
+                  const currentOrderId = activeOrderIdRef.current;
+                  if (currentOrderId) {
+                    await reportRazorpayAttemptFailed({
+                      orderId: currentOrderId,
+                      reason: data.message || 'Razorpay initialization error',
+                    });
+                  }
+                  activeOrderIdRef.current = null;
                   setPaying(false);
                   Alert.alert('Error', data.message || 'An error occurred initializing Razorpay.');
                 }
               } catch (e) {
-                // Ignore parse errors for non-JSON string messages to prevent unexpected crashes/closures
                 console.log('[WebView PostMessage (Non-JSON)]', event.nativeEvent.data);
               }
-            }}
-            onNavigationStateChange={(navState) => {
-              console.log('[WebView Navigation]', navState.url, 'loading:', navState.loading);
             }}
             style={{ flex: 1 }}
             javaScriptEnabled={true}
@@ -1280,8 +986,8 @@ export default function RentPaymentScreen({ navigation }) {
           if (!submittingUtr) setShowUtrModal(false);
         }}
       >
-        <Pressable 
-          style={styles.modalBackdrop} 
+        <Pressable
+          style={styles.modalBackdrop}
           onPress={() => {
             if (!submittingUtr) setShowUtrModal(false);
           }}
@@ -1291,16 +997,17 @@ export default function RentPaymentScreen({ navigation }) {
             style={styles.modalKeyboardAvoiding}
           >
             <Pressable style={styles.rzpContainer} onPress={(e) => e.stopPropagation()}>
-              {/* Header */}
               <View style={styles.rzpHeader}>
-                <View>
+                <View style={{ flex: 1 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <Text style={{ fontSize: 18 }}>📱</Text>
-                    <Text style={styles.rzpBrandName}>Confirm UPI Payment</Text>
+                    <MaterialIcons name="receipt-long" size={18} color={colors.primary} />
+                    <Text style={styles.rzpBrandName}>Submit UPI Reference (UTR)</Text>
                   </View>
-                  <Text style={styles.rzpMerchantName}>Enter the 12-digit UTR / Reference number from your app</Text>
+                  <Text style={styles.rzpMerchantName}>
+                    Your payment will be marked Under Review until the owner confirms receipt
+                  </Text>
                 </View>
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.rzpCloseBtn}
                   onPress={() => {
                     if (!submittingUtr) setShowUtrModal(false);
@@ -1318,25 +1025,26 @@ export default function RentPaymentScreen({ navigation }) {
                   placeholderTextColor="#999"
                   value={utrInput}
                   onChangeText={setUtrInput}
-                  keyboardType="numeric"
-                  maxLength={22}
+                  keyboardType="default"
+                  autoCapitalize="characters"
+                  maxLength={32}
                   autoFocus={true}
                 />
                 <Text style={{ fontFamily: fonts.interRegular, fontSize: 11, color: '#666', marginTop: 6 }}>
-                  You can find the 12-digit UTR in your Google Pay, PhonePe, or Paytm payment history.
+                  Enter the 12-digit UTR from Google Pay, PhonePe, or Paytm. Paid receipts are issued only after the property owner verifies bank credit.
                 </Text>
               </View>
 
               <TouchableOpacity
                 style={[
                   styles.rzpPayBtn,
-                  (submittingUtr || utrInput.trim().length < 6) && { opacity: 0.5 }
+                  (submittingUtr || utrInput.trim().length < 6) && { opacity: 0.5 },
                 ]}
                 onPress={handleUtrSubmit}
                 disabled={submittingUtr || utrInput.trim().length < 6}
               >
                 <Text style={styles.rzpPayBtnText}>
-                  {submittingUtr ? 'Submitting...' : 'Submit for Verification'}
+                  {submittingUtr ? 'Submitting...' : 'Submit UTR for Owner Review'}
                 </Text>
               </TouchableOpacity>
             </Pressable>
@@ -1363,7 +1071,7 @@ const getStyles = (colors) => StyleSheet.create({
     fontFamily: fonts.interSemiBold,
     fontSize: 10, letterSpacing: 2,
     color: colors.onPrimaryContainer,
-    opacity: 0.6,
+    opacity: 0.7,
     textTransform: 'uppercase', marginBottom: 6,
   },
   amountValue: {
@@ -1376,11 +1084,51 @@ const getStyles = (colors) => StyleSheet.create({
     opacity: 0.6,
     marginBottom: 12,
   },
-  dueRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  dueRow: { flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' },
   dueDateText: {
     fontFamily: fonts.interRegular, fontSize: 13,
     color: colors.onPrimaryContainer,
     opacity: 0.7,
+  },
+
+  reviewBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    marginHorizontal: 20,
+    marginTop: 16,
+    padding: 14,
+    borderRadius: 12,
+    backgroundColor: '#FFFBEB',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  reviewBannerTitle: {
+    fontFamily: fonts.manropeBold,
+    fontSize: 13.5,
+    color: '#92400E',
+    marginBottom: 4,
+  },
+  reviewBannerText: {
+    fontFamily: fonts.interRegular,
+    fontSize: 12,
+    color: '#78350F',
+    lineHeight: 17,
+  },
+  updateUtrBtn: {
+    alignSelf: 'flex-start',
+    marginTop: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#F59E0B',
+  },
+  updateUtrBtnText: {
+    fontFamily: fonts.interSemiBold,
+    fontSize: 11.5,
+    color: '#92400E',
   },
 
   utilitySwitchBanner: {
@@ -1434,6 +1182,17 @@ const getStyles = (colors) => StyleSheet.create({
     color: colors.outline,
     marginBottom: 8,
     marginTop: 8,
+  },
+  disabledTag: {
+    fontFamily: fonts.interSemiBold,
+    fontSize: 10,
+    color: colors.error,
+  },
+  verifiedPayeeNote: {
+    fontFamily: fonts.interRegular,
+    fontSize: 11.5,
+    color: colors.onSurfaceVariant,
+    marginBottom: 8,
   },
   badgeContainer: {
     backgroundColor: '#e6f4ea',
@@ -1496,7 +1255,6 @@ const getStyles = (colors) => StyleSheet.create({
   retryBtn: { backgroundColor: colors.primary, borderRadius: 8, paddingVertical: 10, paddingHorizontal: 28 },
   retryText: { fontFamily: fonts.interSemiBold, fontSize: 14, color: colors.onPrimary },
 
-  // Razorpay Modal Styles
   modalBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -1525,25 +1283,10 @@ const getStyles = (colors) => StyleSheet.create({
     borderBottomColor: '#f0f0f0',
     paddingBottom: 12,
   },
-  rzpBrandLogo: {
-    fontSize: 18,
-  },
   rzpBrandName: {
     fontFamily: fonts.interBold,
     fontSize: 16,
     color: '#0d2a4a',
-  },
-  rzpSecureBadge: {
-    backgroundColor: '#e6f0fa',
-    borderRadius: 3,
-    paddingHorizontal: 4,
-    paddingVertical: 1,
-  },
-  rzpSecureBadgeText: {
-    fontFamily: fonts.interSemiBold,
-    fontSize: 8,
-    color: '#3399cc',
-    letterSpacing: 0.5,
   },
   rzpMerchantName: {
     fontFamily: fonts.interRegular,
@@ -1553,60 +1296,6 @@ const getStyles = (colors) => StyleSheet.create({
   },
   rzpCloseBtn: {
     padding: 6,
-  },
-  rzpAmountContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 16,
-  },
-  rzpAmountLabel: {
-    fontFamily: fonts.interMedium,
-    fontSize: 13,
-    color: '#666',
-  },
-  rzpAmountText: {
-    fontFamily: fonts.manropeBold,
-    fontSize: 20,
-    color: '#0d2a4a',
-  },
-  rzpTabs: {
-    flexDirection: 'row',
-    borderWidth: 1,
-    borderColor: '#e8e8e8',
-    borderRadius: 8,
-    overflow: 'hidden',
-    marginBottom: 16,
-  },
-  rzpTab: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 12,
-    backgroundColor: '#fafafa',
-  },
-  rzpTabActive: {
-    backgroundColor: '#fff',
-    borderBottomWidth: 2,
-    borderBottomColor: '#3399cc',
-  },
-  rzpTabText: {
-    fontFamily: fonts.interMedium,
-    fontSize: 13,
-    color: '#666',
-  },
-  rzpTabActiveText: {
-    color: '#3399cc',
-    fontFamily: fonts.interSemiBold,
-  },
-  rzpBody: {
-    minHeight: 130,
-    marginBottom: 20,
-  },
-  rzpInputGroup: {
-    width: '100%',
   },
   rzpInputLabel: {
     fontFamily: fonts.interSemiBold,
@@ -1625,56 +1314,6 @@ const getStyles = (colors) => StyleSheet.create({
     fontFamily: fonts.interRegular,
     color: '#333',
   },
-  rzpSuffixRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 10,
-  },
-  rzpSuffixBtn: {
-    backgroundColor: '#f5f5f5',
-    borderRadius: 16,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderWidth: 1,
-    borderColor: '#e5e5e5',
-  },
-  rzpSuffixBtnText: {
-    fontFamily: fonts.interRegular,
-    fontSize: 11,
-    color: '#555',
-  },
-  rzpBanksGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 4,
-  },
-  rzpBankCard: {
-    width: '48%',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderWidth: 1,
-    borderColor: '#e8e8e8',
-    borderRadius: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    backgroundColor: '#fafafa',
-  },
-  rzpBankCardActive: {
-    borderColor: '#3399cc',
-    backgroundColor: '#f2f8fc',
-  },
-  rzpBankText: {
-    fontFamily: fonts.interMedium,
-    fontSize: 13,
-    color: '#555',
-  },
-  rzpBankTextActive: {
-    color: '#3399cc',
-    fontFamily: fonts.interSemiBold,
-  },
   rzpPayBtn: {
     backgroundColor: '#3399cc',
     borderRadius: 6,
@@ -1691,18 +1330,6 @@ const getStyles = (colors) => StyleSheet.create({
     fontFamily: fonts.interBold,
     fontSize: 15,
     color: '#fff',
-  },
-  rzpFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    marginTop: 14,
-  },
-  rzpFooterText: {
-    fontFamily: fonts.interMedium,
-    fontSize: 10,
-    color: '#bbb',
   },
   webViewHeader: {
     flexDirection: 'row',
@@ -1723,3 +1350,4 @@ const getStyles = (colors) => StyleSheet.create({
     color: '#0d2a4a',
   },
 });
+

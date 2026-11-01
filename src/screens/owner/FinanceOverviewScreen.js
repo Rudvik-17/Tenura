@@ -99,9 +99,16 @@ export default function FinanceOverviewScreen({ navigation }) {
 
   const onRefresh = () => { setRefreshing(true); fetchData(); };
 
-  const collected = payments.filter(p => p.status === 'paid').reduce((s, p) => s + Number(p.amount), 0);
-  const pendingAmount = payments.filter(p => p.status === 'pending' || p.status === 'overdue').reduce((s, p) => s + Number(p.amount), 0);
-  const expenses = transactions.filter(t => t.type !== 'rent').reduce((s, t) => s + Number(t.amount), 0);
+  const collected = payments
+    .filter(p => p.status === 'paid' || p.status === 'partially_refunded')
+    .reduce((s, p) => s + Math.max(0, Number(p.amount || 0) - Number(p.refunded_amount || 0)), 0);
+  const pendingAmount = payments
+    .filter(p => ['pending', 'overdue', 'under_review', 'reversed'].includes(p.status))
+    .reduce((s, p) => s + Number(p.amount || 0), 0);
+  const operatingExpenseTransactions = transactions.filter(
+    t => t.type !== 'rent' && !['refund', 'reversal'].includes(t.entry_kind)
+  );
+  const expenses = operatingExpenseTransactions.reduce((s, t) => s + Number(t.amount || 0), 0);
   const netProfit = collected - expenses;
   const margin = collected > 0 ? Math.round((netProfit / collected) * 100) : 0;
 
@@ -111,7 +118,7 @@ export default function FinanceOverviewScreen({ navigation }) {
       total: list.filter(t => t.category === cat).reduce((s, t) => s + Number(t.amount), 0),
     })).filter(c => c.total > 0);
 
-  const expensesByCat = byCategory(transactions.filter(t => t.type !== 'rent'), EXPENSE_CATEGORIES);
+  const expensesByCat = byCategory(operatingExpenseTransactions, EXPENSE_CATEGORIES);
 
 
 

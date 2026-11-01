@@ -29,6 +29,7 @@ import SectionHeader from '../../components/SectionHeader';
 import StatusChip from '../../components/StatusChip';
 import { RateLimitedButton } from '../../components/RateLimitedButton';
 import { RateLimitedIconButton } from '../../components/RateLimitedIconButton';
+import { fetchCurrentRentObligation } from '../../services/razorpayService';
 
 // DocuSign status → display config
 const DOCUSIGN_STATUS_CONFIG = {
@@ -64,6 +65,9 @@ export default function TenantDashboard({ navigation }) {
     if (!user) return;
     setError(null);
     setLoading(true);
+
+    // Ensure server-owned rent obligation for current billing month exists
+    await fetchCurrentRentObligation().catch(() => {});
 
     // Use limit(1) + array access instead of .single() to handle both
     // zero-row and multi-row cases without throwing a Supabase error.
@@ -113,12 +117,12 @@ export default function TenantDashboard({ navigation }) {
         .eq('status', 'active')
         .order('end_date', { ascending: false })
         .limit(1),
-      // Earliest pending/overdue payment — maybeSingle returns null (not error) on 0 rows
+      // Earliest outstanding payment (including unverified UPI under_review and reversed)
       supabase
         .from('payments')
         .select('*')
         .eq('tenant_id', tenantData.id)
-        .in('status', ['pending', 'overdue'])
+        .in('status', ['pending', 'overdue', 'under_review', 'reversed'])
         .order('due_date', { ascending: true })
         .limit(1),
       supabase
@@ -205,7 +209,9 @@ export default function TenantDashboard({ navigation }) {
     Alert.alert(
       'Rent Balance',
       pendingPayment
-        ? `Your current rent payment of ₹${Number(pendingPayment.amount).toLocaleString('en-IN')} is due on ${formatDate(pendingPayment.due_date)}.`
+        ? pendingPayment.status === 'under_review'
+          ? `Your submitted UPI reference (${pendingPayment.utr_number || 'UTR'}) for ₹${Number(pendingPayment.amount).toLocaleString('en-IN')} is under owner review. Your rent obligation remains outstanding until settlement is confirmed.`
+          : `Your current rent payment of ₹${Number(pendingPayment.amount).toLocaleString('en-IN')} is due on ${formatDate(pendingPayment.due_date)}.`
         : 'You have no outstanding rent payments. All payments are up to date!'
     );
   };
@@ -271,7 +277,11 @@ export default function TenantDashboard({ navigation }) {
                 {pendingPayment
                   ? pendingPayment.status === 'overdue'
                     ? 'BALANCE OVERDUE'
-                    : 'BALANCE DUE'
+                    : pendingPayment.status === 'under_review'
+                      ? 'UNDER OWNER REVIEW (OUTSTANDING)'
+                      : pendingPayment.status === 'reversed'
+                        ? 'PAYMENT REVERSED — DUE'
+                        : 'BALANCE DUE'
                   : 'NO BALANCE DUE'}
               </Text>
               <TouchableOpacity onPress={handleBalanceInfoPress} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
@@ -283,7 +293,9 @@ export default function TenantDashboard({ navigation }) {
             </Text>
             {pendingPayment?.due_date ? (
               <Text style={styles.balanceDueText}>
-                Due {formatDate(pendingPayment.due_date)}
+                {pendingPayment.status === 'under_review'
+                  ? `Due ${formatDate(pendingPayment.due_date)} · Awaiting UTR verification`
+                  : `Due ${formatDate(pendingPayment.due_date)}`}
               </Text>
             ) : (
               <Text style={styles.balanceDueText}>All systems optimal</Text>
@@ -295,7 +307,9 @@ export default function TenantDashboard({ navigation }) {
             onPress={() => navigation.getParent().navigate('Payments', { screen: 'RentPayment' })}
             activeOpacity={0.8}
           >
-            <Text style={styles.makePaymentBtnText}>Make Payment</Text>
+            <Text style={styles.makePaymentBtnText}>
+              {pendingPayment?.status === 'under_review' ? 'View Status' : 'Make Payment'}
+            </Text>
           </RateLimitedButton>
         </View>
 

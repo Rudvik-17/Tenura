@@ -63,39 +63,8 @@ CREATE POLICY "Owners view tenant payment attempts" ON public.payment_attempts
   );
 
 -- 3. Enforce uniqueness of provider IDs on public.payments
--- Clean up any historical duplicate provider IDs before adding unique indexes
-WITH ranked_rzp_pay AS (
-  SELECT id,
-         ROW_NUMBER() OVER (PARTITION BY razorpay_payment_id ORDER BY paid_at ASC NULLS LAST, created_at ASC, id ASC) AS rn
-  FROM public.payments
-  WHERE razorpay_payment_id IS NOT NULL
-)
-UPDATE public.payments p
-SET razorpay_payment_id = NULL
-FROM ranked_rzp_pay r
-WHERE p.id = r.id AND r.rn > 1;
-
-WITH ranked_rzp_ord AS (
-  SELECT id,
-         ROW_NUMBER() OVER (PARTITION BY razorpay_order_id ORDER BY paid_at ASC NULLS LAST, created_at ASC, id ASC) AS rn
-  FROM public.payments
-  WHERE razorpay_order_id IS NOT NULL
-)
-UPDATE public.payments p
-SET razorpay_order_id = NULL
-FROM ranked_rzp_ord r
-WHERE p.id = r.id AND r.rn > 1;
-
-WITH ranked_txn AS (
-  SELECT id,
-         ROW_NUMBER() OVER (PARTITION BY transaction_id ORDER BY paid_at ASC NULLS LAST, created_at ASC, id ASC) AS rn
-  FROM public.payments
-  WHERE transaction_id IS NOT NULL
-)
-UPDATE public.payments p
-SET transaction_id = NULL
-FROM ranked_txn r
-WHERE p.id = r.id AND r.rn > 1;
+-- Historical duplicate or ambiguous references are preserved in public.payment_reconciliation_conflicts (Migration 028)
+-- rather than silently clearing provider columns.
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_unique_razorpay_payment_id
   ON public.payments(razorpay_payment_id)
@@ -178,6 +147,7 @@ AS $$
 DECLARE
   v_attempt public.payment_attempts%ROWTYPE;
   v_payment public.payments%ROWTYPE;
+  v_lookup_payment_id uuid;
   v_payment_amount_paise bigint;
   v_settled_at timestamptz;
   v_jwt_role text;
@@ -195,16 +165,38 @@ BEGIN
     RAISE EXCEPTION 'Missing provider_payment_id';
   END IF;
 
-  -- Lock the attempt row first to serialize concurrent verification/reconciliation calls
-  SELECT *
-  INTO v_attempt
+  -- Lookup parent payment_id first without locking child attempt rows
+  SELECT payment_id
+  INTO v_lookup_payment_id
   FROM public.payment_attempts
-  WHERE provider_order_id = trim(p_provider_order_id)
+  WHERE provider_order_id = trim(p_provider_order_id);
+
+  IF v_lookup_payment_id IS NULL THEN
+    RAISE EXCEPTION 'Trusted payment attempt not found for order %', p_provider_order_id;
+  END IF;
+
+  -- Lock the shared payment row FIRST to prevent deadlocks across concurrent attempts/callbacks
+  SELECT *
+  INTO v_payment
+  FROM public.payments
+  WHERE id = v_lookup_payment_id
   FOR UPDATE;
 
   IF NOT FOUND THEN
-    RAISE EXCEPTION 'Trusted payment attempt not found for order %', p_provider_order_id;
+    RAISE EXCEPTION 'Target payment obligation % not found', v_lookup_payment_id;
   END IF;
+
+  -- Lock all attempts for this payment in deterministic ID order, then read target attempt
+  PERFORM 1
+  FROM public.payment_attempts
+  WHERE payment_id = v_payment.id
+  ORDER BY id ASC
+  FOR UPDATE;
+
+  SELECT *
+  INTO v_attempt
+  FROM public.payment_attempts
+  WHERE provider_order_id = trim(p_provider_order_id);
 
   -- Verify caller ownership if invoked on behalf of an authenticated user
   IF p_caller_user_id IS NOT NULL AND v_attempt.user_id <> p_caller_user_id THEN
@@ -226,17 +218,6 @@ BEGIN
   IF upper(COALESCE(trim(p_verified_currency), '')) <> upper(v_attempt.currency) THEN
     RAISE EXCEPTION 'Currency mismatch: expected %, provider reported %',
       v_attempt.currency, COALESCE(p_verified_currency, 'NULL');
-  END IF;
-
-  -- Lock the target payment row
-  SELECT *
-  INTO v_payment
-  FROM public.payments
-  WHERE id = v_attempt.payment_id
-  FOR UPDATE;
-
-  IF NOT FOUND THEN
-    RAISE EXCEPTION 'Target payment obligation % not found', v_attempt.payment_id;
   END IF;
 
   IF v_payment.tenant_id <> v_attempt.tenant_id THEN

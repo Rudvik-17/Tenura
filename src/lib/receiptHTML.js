@@ -1,4 +1,7 @@
 const METHOD_LABELS = {
+  razorpay: 'Razorpay Secure Checkout',
+  upi_direct: 'Direct UPI (Owner Verified)',
+  upi: 'UPI',
   gpay: 'Google Pay',
   phonepe: 'PhonePe',
   paytm: 'Paytm',
@@ -17,8 +20,30 @@ export function buildReceiptHTML({
   departmentName,
   departmentUpiId,
   consumerNumber,
+  status = 'paid',
+  refundedAmount = 0,
+  verificationStatus = null,
 }) {
-  const formattedAmount = `₹${Number(amount).toLocaleString('en-IN')}`;
+  const isUtilityReceipt = Boolean(departmentName);
+  if (
+    !status ||
+    (status !== 'paid' && status !== 'partially_refunded') ||
+    (!isUtilityReceipt &&
+      verificationStatus !== 'verified_provider' &&
+      verificationStatus !== 'verified_owner') ||
+    verificationStatus === 'legacy_unverified' ||
+    verificationStatus === 'unverified' ||
+    verificationStatus === 'conflict'
+  ) {
+    throw new Error('Cannot generate a paid receipt for an unsettled or unverified payment.');
+  }
+
+  const numericAmount = Number(amount || 0);
+  const numericRefunded = Number(refundedAmount || 0);
+  const netPaidAmount = Math.max(0, numericAmount - numericRefunded);
+  const formattedAmount = `₹${netPaidAmount.toLocaleString('en-IN')}`;
+  const formattedGrossAmount = `₹${numericAmount.toLocaleString('en-IN')}`;
+  const formattedRefundedAmount = `₹${numericRefunded.toLocaleString('en-IN')}`;
   const formattedDate = new Date(paidAt).toLocaleDateString('en-IN', {
     day: 'numeric', month: 'long', year: 'numeric',
   });
@@ -26,7 +51,19 @@ export function buildReceiptHTML({
     hour: '2-digit', minute: '2-digit', second: '2-digit',
   });
   const receiptNo = `RCPT-${txnId}`;
-  const methodLabel = METHOD_LABELS[method] ?? method;
+  const methodLabel = METHOD_LABELS[method] ?? method ?? 'Razorpay';
+  const refundRows = numericRefunded > 0
+    ? `
+        <tr>
+          <td class="detail-key">Original Paid Amount</td>
+          <td class="detail-value">${formattedGrossAmount}</td>
+        </tr>
+        <tr>
+          <td class="detail-key">Refunded Amount</td>
+          <td class="detail-value" style="color:#b45309;">- ${formattedRefundedAmount}</td>
+        </tr>
+      `
+    : '';
   const utilityRows = departmentName
     ? `
         <tr>
@@ -178,15 +215,16 @@ export function buildReceiptHTML({
     </div>
     <div class="status-banner">
       <span class="status-dot"></span>
-      <span class="status-text">Payment Confirmed</span>
+      <span class="status-text">${numericRefunded > 0 ? 'Payment Confirmed (Partial Refund Issued)' : 'Payment Confirmed'}</span>
     </div>
     <div class="body">
       <div class="amount-section">
-        <div class="amount-label">Amount Paid</div>
+        <div class="amount-label">${numericRefunded > 0 ? 'Net Amount Paid' : 'Amount Paid'}</div>
         <div class="amount-value">${formattedAmount}</div>
       </div>
       <table class="details-table">
         ${utilityRows}
+        ${refundRows}
         <tr>
           <td class="detail-key">Tenant</td>
           <td class="detail-value">${tenantName}</td>
@@ -201,7 +239,7 @@ export function buildReceiptHTML({
         </tr>
         <tr>
           <td class="detail-key">Payment Method</td>
-          <td class="detail-value">UPI · ${methodLabel}</td>
+          <td class="detail-value">${methodLabel}</td>
         </tr>
         <tr>
           <td class="detail-key">Date</td>
@@ -217,7 +255,7 @@ export function buildReceiptHTML({
         </tr>
         <tr>
           <td class="detail-key">Status</td>
-          <td class="detail-value" style="color:#1a8a5a; font-weight:700;">&#10003; Paid</td>
+          <td class="detail-value" style="color:#1a8a5a; font-weight:700;">&#10003; ${numericRefunded > 0 ? 'Paid (Partially Refunded)' : 'Paid'}</td>
         </tr>
       </table>
     </div>

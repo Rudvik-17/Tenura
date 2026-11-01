@@ -65,12 +65,11 @@ export default function OwnerDashboard({ navigation }) {
             .order('date', { ascending: false })
             .limit(10)
         : Promise.resolve({ data: [], error: null }),
-      // Bug 1 fix: query payments via tenants join — payments has no owner_id column
       supabase
         .from('payments')
-        .select('amount, paid_at, tenants!inner(owner_id)')
+        .select('amount, refunded_amount, status, paid_at, tenants!inner(owner_id)')
         .eq('tenants.owner_id', user.id)
-        .eq('status', 'paid'),
+        .in('status', ['paid', 'partially_refunded']),
       propertyIds.length > 0
         ? supabase
             .from('maintenance_requests')
@@ -91,11 +90,14 @@ export default function OwnerDashboard({ navigation }) {
     const totalUnits = props.reduce((s, p) => s + p.total_units, 0);
     const activeLeases = props.flatMap(p => p.leases).filter(l => l.status === 'active').length;
     const paidPayments = paymentsRes.data ?? [];
-    const totalCollected = paidPayments.reduce((s, p) => s + Number(p.amount), 0);
+    const totalCollected = paidPayments.reduce(
+      (s, p) => s + Math.max(0, Number(p.amount || 0) - Number(p.refunded_amount || 0)),
+      0
+    );
     const startOfMonthTime = new Date(startOfMonth).getTime();
     const mtdCollected = paidPayments
       .filter(p => p.paid_at && new Date(p.paid_at).getTime() >= startOfMonthTime)
-      .reduce((s, p) => s + Number(p.amount), 0);
+      .reduce((s, p) => s + Math.max(0, Number(p.amount || 0) - Number(p.refunded_amount || 0)), 0);
     const activeIssuesData = issuesRes.data ?? [];
     const activeIssues = activeIssuesData.length;
     const urgentIssues = activeIssuesData.filter(i => i.priority === 'high').length;
@@ -273,29 +275,32 @@ export default function OwnerDashboard({ navigation }) {
               <Text style={styles.emptyText}>No transactions yet</Text>
             </View>
           ) : (
-            transactions.map((tx) => (
-              <View key={tx.id} style={styles.txRow}>
-                <View style={styles.txIconBg}>
-                  <MaterialIcons
-                    name={tx.type === 'rent' ? 'arrow-downward' : 'arrow-upward'}
-                    size={16}
-                    color={tx.type === 'rent' ? colors.onTertiaryContainer : colors.error}
-                  />
-                </View>
-                <View style={styles.txInfo}>
-                  <Text style={styles.txDesc} numberOfLines={1}>{tx.description}</Text>
-                  <Text style={styles.txDate}>
-                    {new Date(tx.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+            transactions.map((tx) => {
+              const isInflow = tx.type === 'rent' && Number(tx.amount || 0) >= 0;
+              return (
+                <View key={tx.id} style={styles.txRow}>
+                  <View style={styles.txIconBg}>
+                    <MaterialIcons
+                      name={isInflow ? 'arrow-downward' : 'arrow-upward'}
+                      size={16}
+                      color={isInflow ? colors.onTertiaryContainer : colors.error}
+                    />
+                  </View>
+                  <View style={styles.txInfo}>
+                    <Text style={styles.txDesc} numberOfLines={1}>{tx.description}</Text>
+                    <Text style={styles.txDate}>
+                      {new Date(tx.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    </Text>
+                  </View>
+                  <Text style={[
+                    styles.txAmount,
+                    { color: isInflow ? colors.onTertiaryContainer : colors.error }
+                  ]}>
+                    {isInflow ? '+' : '-'}₹{Math.abs(Number(tx.amount || 0)).toLocaleString('en-IN')}
                   </Text>
                 </View>
-                <Text style={[
-                  styles.txAmount,
-                  { color: tx.type === 'rent' ? colors.onTertiaryContainer : colors.error }
-                ]}>
-                  {tx.type === 'rent' ? '+' : '-'}₹{Number(tx.amount).toLocaleString('en-IN')}
-                </Text>
-              </View>
-            ))
+              );
+            })
           )}
         </View>
       </ScrollView>

@@ -181,7 +181,7 @@ export default function TenantDetailScreen({ navigation, route }) {
   const handleRemove = () => {
     Alert.alert(
       'Remove Resident',
-      `Are you sure you want to remove ${tenant.full_name}? This will remove them from your property and resident list.`,
+      `Are you sure you want to remove ${tenant.full_name}? Financial and payment ledger records will be preserved for audit compliance.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -208,23 +208,49 @@ export default function TenantDetailScreen({ navigation, route }) {
         await supabase.from('maintenance_requests').delete().in('id', issueIds);
       }
 
-      // 2. Delete payments associated with this tenant
-      await supabase.from('payments').delete().eq('tenant_id', tenant.id);
+      // 2. Check if this tenant has any payment records (financial history must never be deleted)
+      const { data: existingPayments, error: payCheckErr } = await supabase
+        .from('payments')
+        .select('id')
+        .eq('tenant_id', tenant.id)
+        .limit(1);
 
-      // 3. Delete leases associated with this tenant
-      await supabase.from('leases').delete().eq('tenant_id', tenant.id);
-
-      // 4. Delete tenant record
-      const { error: delError } = await supabase
-        .from('tenants')
-        .delete()
-        .eq('id', tenant.id);
-
-      if (delError) {
-        throw delError;
+      if (payCheckErr) {
+        throw payCheckErr;
       }
 
-      // 5. Clean up cached deposit record
+      if (existingPayments && existingPayments.length > 0) {
+        // Preserve financial history: terminate active leases and mark resident as exiting
+        await supabase
+          .from('leases')
+          .update({ status: 'terminated' })
+          .eq('tenant_id', tenant.id)
+          .eq('status', 'active');
+
+        const { error: archiveErr } = await supabase
+          .from('tenants')
+          .update({ status: 'exiting', user_id: null })
+          .eq('id', tenant.id)
+          .eq('owner_id', user.id);
+
+        if (archiveErr) {
+          throw archiveErr;
+        }
+      } else {
+        // No financial history exists — safe to remove draft leases and tenant record
+        await supabase.from('leases').delete().eq('tenant_id', tenant.id);
+
+        const { error: delError } = await supabase
+          .from('tenants')
+          .delete()
+          .eq('id', tenant.id);
+
+        if (delError) {
+          throw delError;
+        }
+      }
+
+      // Clean up cached deposit record
       await removeTenantDeposit(tenant.id, tenant.full_name);
 
       setRemoving(false);

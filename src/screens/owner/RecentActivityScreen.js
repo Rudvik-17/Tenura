@@ -76,13 +76,24 @@ export default function RecentActivityScreen({ navigation }) {
       return;
     }
 
-    const paidPayments = (paymentsRes.data ?? [])
-      .filter(p => p.status === 'paid')
-      .map(p => ({ ...p, _kind: 'payment', _date: p.paid_at ?? p.due_date }));
-    const transactions = (txRes.data ?? [])
+    const txList = txRes.data ?? [];
+    const settledPaymentIdsInLedger = new Set(
+      txList
+        .filter(t => t.payment_id && (!t.entry_kind || t.entry_kind === 'settlement'))
+        .map(t => t.payment_id)
+    );
+
+    const notablePayments = (paymentsRes.data ?? [])
+      .filter(
+        p =>
+          ['paid', 'partially_refunded', 'refunded', 'reversed', 'under_review'].includes(p.status) &&
+          !settledPaymentIdsInLedger.has(p.id)
+      )
+      .map(p => ({ ...p, _kind: 'payment', _date: p.paid_at ?? p.updated_at ?? p.due_date }));
+    const transactions = txList
       .map(t => ({ ...t, _kind: 'transaction', _date: t.date }));
 
-    const merged = [...paidPayments, ...transactions]
+    const merged = [...notablePayments, ...transactions]
       .sort((a, b) => new Date(b._date) - new Date(a._date));
 
     setActivity(merged);
@@ -102,7 +113,7 @@ export default function RecentActivityScreen({ navigation }) {
     fetchData();
   };
 
-  const fmt = (n) => `₹${Number(n).toLocaleString('en-IN')}`;
+  const fmt = (n) => `₹${Math.abs(Number(n || 0)).toLocaleString('en-IN')}`;
 
   if (loading) {
     return (
@@ -133,11 +144,20 @@ export default function RecentActivityScreen({ navigation }) {
 
   const renderItem = ({ item }) => {
     const isPayment = item._kind === 'payment';
+    const isUnderReview = isPayment && item.status === 'under_review';
+    const isPositiveInflow = isPayment
+      ? (item.status === 'paid' || item.status === 'partially_refunded')
+      : (item.type === 'rent' && Number(item.amount || 0) >= 0);
+    const displayAmount = isPayment
+      ? (item.status === 'under_review'
+          ? Number(item.amount || 0)
+          : Math.max(0, Number(item.amount || 0) - Number(item.refunded_amount || 0)))
+      : Math.abs(Number(item.amount || 0));
     const label = isPayment
       ? (item.tenants?.full_name ?? 'Tenant')
       : (item.description ?? item.category ?? item.type);
     const subtitle = isPayment
-      ? `Rent payment from ${item.tenants?.full_name ?? 'Tenant'}`
+      ? `Rent (${item.status.replace('_', ' ')}) · ${item.tenants?.full_name ?? 'Tenant'}`
       : (item.category ? item.category.charAt(0).toUpperCase() + item.category.slice(1) : item.type);
     const dateStr = new Date(item._date).toLocaleDateString('en-IN', {
       day: 'numeric', month: 'short', year: 'numeric',
@@ -147,12 +167,16 @@ export default function RecentActivityScreen({ navigation }) {
       <View style={styles.lineItem}>
         <View style={styles.lineItemLeft}>
           <View style={[styles.iconCircle, {
-            backgroundColor: isPayment ? `${colors.tertiaryFixedDim}20` : `${colors.error}15`,
+            backgroundColor: isUnderReview
+              ? `${colors.primary}15`
+              : isPositiveInflow
+                ? `${colors.tertiaryFixedDim}20`
+                : `${colors.error}15`,
           }]}>
             <MaterialIcons
-              name={isPayment ? 'check-circle' : 'receipt'}
+              name={isUnderReview ? 'hourglass-top' : isPositiveInflow ? 'check-circle' : 'receipt'}
               size={20}
-              color={isPayment ? colors.tertiaryFixedDim : colors.onSurfaceVariant}
+              color={isUnderReview ? colors.primary : isPositiveInflow ? colors.tertiaryFixedDim : colors.onSurfaceVariant}
             />
           </View>
           <View style={{ flex: 1 }}>
@@ -162,9 +186,9 @@ export default function RecentActivityScreen({ navigation }) {
           </View>
         </View>
         <Text style={[styles.lineItemAmount, {
-          color: isPayment ? colors.tertiaryFixedDim : colors.error,
+          color: isUnderReview ? colors.primary : isPositiveInflow ? colors.tertiaryFixedDim : colors.error,
         }]}>
-          {isPayment ? '+' : '-'}{fmt(item.amount)}
+          {isUnderReview ? '' : isPositiveInflow ? '+' : '-'}{fmt(displayAmount)}
         </Text>
       </View>
     );
@@ -184,7 +208,7 @@ export default function RecentActivityScreen({ navigation }) {
       ) : (
         <FlatList
           data={activity}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item) => `${item._kind}-${item.id}`}
           renderItem={renderItem}
           contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 24 }}
           showsVerticalScrollIndicator={false}

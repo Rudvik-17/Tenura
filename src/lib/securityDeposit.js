@@ -49,36 +49,76 @@ export async function getAllDeposits() {
  */
 export async function getTenantDeposit(tenantId, tenantName = '', monthlyRent = 0, dbDeposit = null) {
   try {
-    const all = await getAllDeposits();
     const idKey = tenantId ? String(tenantId).toLowerCase() : null;
     const nameKey = tenantName ? tenantName.trim().toLowerCase().split(' ')[0] : null;
 
-    let record = null;
-    if (idKey && all[idKey]) {
-      record = all[idKey];
-    } else if (nameKey && all[nameKey]) {
-      record = all[nameKey];
-    } else if (nameKey && DEFAULT_DEPOSIT_MAP[nameKey]) {
-      record = DEFAULT_DEPOSIT_MAP[nameKey];
+    let dbRecord = null;
+    // 1. Prioritize live Supabase tenants record if tenantId is a valid UUID
+    if (tenantId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(tenantId))) {
+      try {
+        const { data, error } = await supabase
+          .from('tenants')
+          .select('security_deposit, deposit_status, deposit_deductions, deposit_notes, deposit_collected_at, deposit_refunded_at')
+          .eq('id', tenantId)
+          .maybeSingle();
+        if (!error && data) {
+          dbRecord = data;
+        }
+      } catch (err) {
+        console.warn('Could not fetch deposit from Supabase, using cache:', err);
+      }
     }
 
-    // Determine deposit amount: saved custom price > db column > fallback to monthly rent or 30000
-    const resolvedAmount = record?.amount ?? (dbDeposit ? Number(dbDeposit) : (monthlyRent > 0 ? Number(monthlyRent) * 2 : 30000));
-    const deductions = record?.deductions ?? [];
+    const all = await getAllDeposits();
+    let cacheRecord = null;
+    if (idKey && all[idKey]) {
+      cacheRecord = all[idKey];
+    } else if (nameKey && all[nameKey]) {
+      cacheRecord = all[nameKey];
+    }
+
+    // Merge: live DB takes precedence over local cache
+    const resolvedAmount = dbRecord?.security_deposit != null
+      ? Number(dbRecord.security_deposit)
+      : (cacheRecord?.amount ?? (dbDeposit ? Number(dbDeposit) : (monthlyRent > 0 ? Number(monthlyRent) * 2 : 30000)));
+
+    const deductions = Array.isArray(dbRecord?.deposit_deductions)
+      ? dbRecord.deposit_deductions
+      : (cacheRecord?.deductions ?? (nameKey && DEFAULT_DEPOSIT_MAP[nameKey]?.deductions ? DEFAULT_DEPOSIT_MAP[nameKey].deductions : []));
+
     const totalDeductions = deductions.reduce((sum, d) => sum + (Number(d.amount) || 0), 0);
     const netRefund = Math.max(0, resolvedAmount - totalDeductions);
-    const status = record?.status ?? 'collected';
+    const status = dbRecord?.deposit_status || cacheRecord?.status || (nameKey && DEFAULT_DEPOSIT_MAP[nameKey]?.status) || 'collected';
+    const collectedAt = dbRecord?.deposit_collected_at || cacheRecord?.collectedAt || null;
+    const refundedAt = dbRecord?.deposit_refunded_at || cacheRecord?.refundedAt || null;
+    const notes = dbRecord?.deposit_notes ?? cacheRecord?.notes ?? '';
 
-    return {
+    const result = {
       amount: resolvedAmount,
       status, // 'collected' (before handover) | 'pending' (not yet paid) | 'refunded' (returned on vacating)
-      collectedAt: record?.collectedAt ?? null,
-      refundedAt: record?.refundedAt ?? null,
+      collectedAt,
+      refundedAt,
       deductions,
       totalDeductions,
       netRefund,
-      notes: record?.notes ?? '',
+      notes,
     };
+
+    // Keep AsyncStorage cache updated with fresh record
+    if (idKey && dbRecord) {
+      all[idKey] = {
+        amount: resolvedAmount,
+        status,
+        collectedAt,
+        refundedAt,
+        deductions,
+        notes,
+        updatedAt: new Date().toISOString(),
+      };
+      AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(all)).catch(() => {});
+    }
+
+    return result;
   } catch (err) {
     console.warn('Error getting tenant deposit:', err);
     const fallbackAmount = dbDeposit ? Number(dbDeposit) : 30000;
@@ -121,18 +161,22 @@ export async function saveTenantDeposit(tenantId, tenantName, depositData) {
 
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(all));
 
-    // Also attempt to update Supabase tenants table in the background
-    if (tenantId) {
-      try {
-        await supabase
-          .from('tenants')
-          .update({
-            security_deposit: updatedRecord.amount,
-          })
-          .eq('id', tenantId);
-      } catch (dbErr) {
-        // Silently catch if remote schema hasn't executed migration yet
-        console.log('Supabase tenant update skipped/failed:', dbErr?.message);
+    // Update Supabase tenants table with all deposit columns
+    if (tenantId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(tenantId))) {
+      const { error: dbErr } = await supabase
+        .from('tenants')
+        .update({
+          security_deposit: updatedRecord.amount,
+          deposit_status: updatedRecord.status,
+          deposit_deductions: updatedRecord.deductions,
+          deposit_notes: updatedRecord.notes,
+          deposit_collected_at: updatedRecord.collectedAt,
+          deposit_refunded_at: updatedRecord.refundedAt,
+        })
+        .eq('id', tenantId);
+
+      if (dbErr) {
+        console.warn('Supabase tenant deposit update error:', dbErr.message);
       }
     }
 

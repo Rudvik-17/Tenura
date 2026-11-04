@@ -25,13 +25,14 @@ export function buildReceiptHTML({
   verificationStatus = null,
 }) {
   const isUtilityReceipt = Boolean(departmentName);
+  const isLegacy = verificationStatus === 'legacy_unverified';
   if (
     !status ||
     (status !== 'paid' && status !== 'partially_refunded') ||
     (!isUtilityReceipt &&
       verificationStatus !== 'verified_provider' &&
-      verificationStatus !== 'verified_owner') ||
-    verificationStatus === 'legacy_unverified' ||
+      verificationStatus !== 'verified_owner' &&
+      !isLegacy) ||
     verificationStatus === 'unverified' ||
     verificationStatus === 'conflict'
   ) {
@@ -52,6 +53,12 @@ export function buildReceiptHTML({
   });
   const receiptNo = `RCPT-${txnId}`;
   const methodLabel = METHOD_LABELS[method] ?? method ?? 'Razorpay';
+  const bannerBg = isLegacy ? '#FEF3C7' : '#68dba9';
+  const bannerTextColor = isLegacy ? '#92400E' : '#002045';
+  const bannerDotColor = isLegacy ? '#B45309' : '#002045';
+  const bannerText = isLegacy
+    ? 'Historical Record · Settled Prior to Platform Verification'
+    : (numericRefunded > 0 ? 'Payment Confirmed (Partial Refund Issued)' : 'Payment Confirmed');
   const refundRows = numericRefunded > 0
     ? `
         <tr>
@@ -213,9 +220,9 @@ export function buildReceiptHTML({
         <div class="receipt-no">${receiptNo}</div>
       </div>
     </div>
-    <div class="status-banner">
-      <span class="status-dot"></span>
-      <span class="status-text">${numericRefunded > 0 ? 'Payment Confirmed (Partial Refund Issued)' : 'Payment Confirmed'}</span>
+    <div class="status-banner" style="background: ${bannerBg};">
+      <span class="status-dot" style="background: ${bannerDotColor};"></span>
+      <span class="status-text" style="color: ${bannerTextColor};">${bannerText}</span>
     </div>
     <div class="body">
       <div class="amount-section">
@@ -223,6 +230,12 @@ export function buildReceiptHTML({
         <div class="amount-value">${formattedAmount}</div>
       </div>
       <table class="details-table">
+        ${isLegacy ? `
+        <tr>
+          <td class="detail-key">Settlement Type</td>
+          <td class="detail-value" style="color:#B45309; font-weight:700;">Historical Import / Record</td>
+        </tr>
+        ` : ''}
         ${utilityRows}
         ${refundRows}
         <tr>

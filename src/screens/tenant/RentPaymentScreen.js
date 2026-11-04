@@ -136,9 +136,9 @@ function generateRazorpayHtml(keyId, amount, email, name, phone, orderId) {
                 }
               };
 
-              const prefillName = "${name || ''}";
-              const prefillEmail = "${email || ''}";
-              const prefillPhone = "${phone || ''}";
+              const prefillName = ${JSON.stringify(name || '')};
+              const prefillEmail = ${JSON.stringify(email || '')};
+              const prefillPhone = ${JSON.stringify(phone || '')};
 
               if (prefillName) options.prefill.name = prefillName;
               if (prefillEmail) options.prefill.email = prefillEmail;
@@ -200,12 +200,13 @@ const PAYMENT_METHODS = [
   },
 ];
 
-export default function RentPaymentScreen({ navigation }) {
+export default function RentPaymentScreen({ navigation, route }) {
   const { colors } = useTheme();
   const styles = getStyles(colors);
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
 
+  const targetParamPaymentId = route?.params?.paymentId ?? null;
   const [tenantPhone, setTenantPhone] = useState('');
   const [lease, setLease] = useState(null);
   const [payment, setPayment] = useState(null);
@@ -214,9 +215,29 @@ export default function RentPaymentScreen({ navigation }) {
   const [noActiveLease, setNoActiveLease] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [selectedMethod, setSelectedMethod] = useState('razorpay');
+  const [selectedMethod, setSelectedMethod] = useState(
+    process.env.EXPO_PUBLIC_RAZORPAY_KEY_ID && process.env.EXPO_PUBLIC_RAZORPAY_KEY_ID !== 'rzp_test_defaultKeyId'
+      ? 'razorpay'
+      : 'gpay'
+  );
   const [paying, setPaying] = useState(false);
+  const [preferredSavedMethod, setPreferredSavedMethod] = useState(null);
   const awaitingUpiReturn = useRef(false);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    supabase
+      .from('stored_payment_methods')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('is_active', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) setPreferredSavedMethod(data);
+      })
+      .catch(() => {});
+  }, [user?.id]);
 
   // Real Razorpay WebView states
   const [showRealRazorpay, setShowRealRazorpay] = useState(false);
@@ -267,7 +288,24 @@ export default function RentPaymentScreen({ navigation }) {
       return;
     }
 
-    let paymentData = obligationState.payment || null;
+    let paymentData = null;
+    if (targetParamPaymentId && isValidPaymentUuid(targetParamPaymentId)) {
+      const { data: specificRow } = await supabase
+        .from('payments')
+        .select('*')
+        .eq('id', targetParamPaymentId)
+        .maybeSingle();
+      if (
+        specificRow &&
+        ['pending', 'overdue', 'under_review', 'reversed'].includes(specificRow.status)
+      ) {
+        paymentData = specificRow;
+      }
+    }
+
+    if (!paymentData) {
+      paymentData = obligationState.payment || null;
+    }
 
     // Reconcile any interrupted Razorpay checkout attempts if an obligation is still outstanding
     if (
@@ -287,7 +325,7 @@ export default function RentPaymentScreen({ navigation }) {
     if (paymentData?.due_date && (paymentData.status === 'pending' || paymentData.status === 'overdue')) {
       scheduleRentReminder({ amount: paymentData.amount, dueDate: paymentData.due_date });
     }
-  }, [user?.id]);
+  }, [user?.id, targetParamPaymentId]);
 
   useEffect(() => {
     fetchPayment();
@@ -476,14 +514,23 @@ export default function RentPaymentScreen({ navigation }) {
       return;
     }
 
+    if (payment.status === 'under_review') {
+      Alert.alert(
+        'Payment Under Owner Review',
+        `A UPI reference (${payment.utr_number || 'UTR'}) has already been submitted for this rent obligation. New checkout attempts are locked to prevent double-charging until the property owner verifies your bank transfer.`
+      );
+      return;
+    }
+
     if (selectedMethod === 'razorpay') {
       const keyId = process.env.EXPO_PUBLIC_RAZORPAY_KEY_ID;
 
       if (!keyId || keyId === 'rzp_test_defaultKeyId') {
         Alert.alert(
-          'Payment Gateway Not Configured',
-          'Razorpay checkout is unavailable because EXPO_PUBLIC_RAZORPAY_KEY_ID is not configured. Please contact support or your property manager.'
+          'Razorpay Unavailable',
+          'Razorpay gateway is not configured with an API key. Please use Direct UPI (Google Pay, PhonePe, or Paytm) to transfer directly to the owner.'
         );
+        setSelectedMethod('gpay');
         return;
       }
 
@@ -630,6 +677,9 @@ export default function RentPaymentScreen({ navigation }) {
   }
 
   const getCtaLabel = () => {
+    if (payment?.status === 'under_review') {
+      return 'Under Review by Owner (Locked)';
+    }
     const amountStr = `₹${Number(payment?.amount ?? 0).toLocaleString('en-IN')}`;
     if (selectedMethod === 'razorpay') {
       return `Pay via Razorpay • ${amountStr}`;
@@ -640,6 +690,9 @@ export default function RentPaymentScreen({ navigation }) {
   };
 
   const getCtaSubtext = () => {
+    if (payment?.status === 'under_review') {
+      return `UPI reference (${payment.utr_number || 'UTR'}) is awaiting owner review. New checkout attempts are locked to prevent double payment.`;
+    }
     if (selectedMethod === 'razorpay') {
       return 'Server-verified settlement via Razorpay. Paid receipt issued only after provider capture.';
     }
@@ -768,6 +821,21 @@ export default function RentPaymentScreen({ navigation }) {
         <View style={styles.methodsSection}>
           <Text style={styles.methodsTitle}>Select Payment Option</Text>
 
+          {preferredSavedMethod && (
+            <View style={styles.walletPreferenceCard}>
+              <View style={styles.walletPrefLeft}>
+                <MaterialIcons name="account-balance-wallet" size={20} color={colors.primary} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.walletPrefTitle}>Wallet Preset • {preferredSavedMethod.label}</Text>
+                  <Text style={styles.walletPrefValue}>{preferredSavedMethod.value}</Text>
+                </View>
+              </View>
+              <View style={styles.walletPrefBadge}>
+                <Text style={styles.walletPrefBadgeText}>Saved in Wallet</Text>
+              </View>
+            </View>
+          )}
+
           {/* Section: Standard Gateway */}
           <Text style={styles.sectionHeader}>INSTANT VERIFIED GATEWAY</Text>
           {PAYMENT_METHODS.filter(m => m.type === 'razorpay').map(method => (
@@ -863,8 +931,12 @@ export default function RentPaymentScreen({ navigation }) {
             label={getCtaLabel()}
             onPress={handleConfirmPay}
             loading={paying}
-            disabled={paying || (selectedMethod !== 'razorpay' && !isDirectUpiVerified)}
-            icon="lock"
+            disabled={
+              paying ||
+              payment.status === 'under_review' ||
+              (selectedMethod !== 'razorpay' && !isDirectUpiVerified)
+            }
+            icon={payment.status === 'under_review' ? 'hourglass-top' : 'lock'}
           />
           <Text style={styles.mockNote}>
             {getCtaSubtext()}
@@ -897,8 +969,37 @@ export default function RentPaymentScreen({ navigation }) {
           </View>
 
           <WebView
-            originWhitelist={['https://*', 'upi://*', 'about:*']}
+            originWhitelist={['https://*', 'http://*', 'upi://*', 'tez://*', 'phonepe://*', 'paytmmp://*', 'intent://*', 'about:*']}
             source={{ html: razorpayHtml, baseUrl: 'https://olswwdunaivwxefelasc.supabase.co' }}
+            onShouldStartLoadWithRequest={(request) => {
+              const url = request.url;
+              if (
+                url.startsWith('upi://') ||
+                url.startsWith('tez://') ||
+                url.startsWith('phonepe://') ||
+                url.startsWith('paytmmp://') ||
+                url.startsWith('intent://')
+              ) {
+                Linking.canOpenURL(url)
+                  .then((supported) => {
+                    if (supported) {
+                      Linking.openURL(url).catch((err) => console.warn('Could not open UPI app:', err));
+                    } else {
+                      Linking.openURL(url).catch(() => {
+                        Alert.alert(
+                          'UPI App Not Detected',
+                          'Could not open the requested UPI app directly. Please ensure Google Pay, PhonePe, or Paytm is installed.'
+                        );
+                      });
+                    }
+                  })
+                  .catch(() => {
+                    Linking.openURL(url).catch(() => {});
+                  });
+                return false;
+              }
+              return true;
+            }}
             onMessage={async (event) => {
               try {
                 const data = JSON.parse(event.nativeEvent.data);
@@ -1174,6 +1275,46 @@ const getStyles = (colors) => StyleSheet.create({
   methodsTitle: {
     fontFamily: fonts.manropeSemiBold, fontSize: 16,
     color: colors.onSurface, marginBottom: 12,
+  },
+  walletPreferenceCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: `${colors.primary}0D`,
+    borderWidth: 1,
+    borderColor: `${colors.primary}25`,
+    marginBottom: 14,
+    gap: 10,
+  },
+  walletPrefLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+  },
+  walletPrefTitle: {
+    fontFamily: fonts.interSemiBold,
+    fontSize: 12.5,
+    color: colors.onSurface,
+  },
+  walletPrefValue: {
+    fontFamily: fonts.interRegular,
+    fontSize: 11.5,
+    color: colors.onSurfaceVariant,
+    marginTop: 1,
+  },
+  walletPrefBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    backgroundColor: `${colors.primary}1A`,
+  },
+  walletPrefBadgeText: {
+    fontFamily: fonts.interSemiBold,
+    fontSize: 10.5,
+    color: colors.primary,
   },
   sectionHeader: {
     fontFamily: fonts.interSemiBold,

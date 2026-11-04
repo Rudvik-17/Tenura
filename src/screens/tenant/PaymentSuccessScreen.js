@@ -155,6 +155,9 @@ export default function PaymentSuccessScreen({ navigation, route }) {
     ...(Number(verifiedPayment?.refunded_amount || 0) > 0
       ? [{ key: 'Refunded', value: `₹${Number(verifiedPayment.refunded_amount).toLocaleString('en-IN')}` }]
       : []),
+    ...(verifiedPayment?.is_legacy
+      ? [{ key: 'Record Type', value: 'Historical Record (Imported)', highlight: true }]
+      : []),
     { key: 'Payment Method', value: METHOD_LABELS[effectiveMethod] ?? effectiveMethod },
     { key: 'Transaction Date', value: `${formattedDate} · ${formattedTime}` },
     { key: 'Transaction ID', value: effectiveTxnId || '—' },

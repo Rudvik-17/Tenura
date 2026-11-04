@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Linking } from 'react-native';
+import { supabase } from './supabase';
 import { toAsciiDigits } from './securityDeposit';
 
 const UTILITY_STORAGE_KEY = '@tenura_utility_bills_v1';
@@ -200,20 +201,65 @@ export function getDefaultTenantUtilities(unitNumber = '101', city = 'Bangalore'
 }
 
 /**
- * Load utility bills for a tenant from AsyncStorage
+ * Load utility bills for a tenant from Supabase and AsyncStorage
  */
 export async function getTenantUtilityBills(tenantId, unitNumber = '101', city = 'Bangalore') {
   const key = tenantId ? String(tenantId).toLowerCase() : 'default-tenant';
+  const isUuid = tenantId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(tenantId));
+
   try {
+    let cloudHistory = [];
+    if (isUuid) {
+      try {
+        const { data: bills, error: billsErr } = await supabase
+          .from('utility_bills')
+          .select('*')
+          .eq('tenant_id', tenantId)
+          .order('created_at', { ascending: false });
+
+        if (!billsErr && Array.isArray(bills) && bills.length > 0) {
+          cloudHistory = bills.map((b) => ({
+            id: b.id,
+            billType: b.bill_type,
+            title: b.title,
+            departmentCode: b.department_code,
+            departmentName: b.department_name,
+            departmentShortName: b.department_short_name,
+            departmentUpiId: b.department_upi_id,
+            consumerNumber: b.consumer_number,
+            billingMonth: b.billing_month,
+            amount: Number(b.amount || 0),
+            paidAt: b.paid_at,
+            dueDate: b.due_date,
+            txnId: b.txn_id,
+            paymentMethod: b.payment_method,
+            status: b.status,
+          }));
+        }
+      } catch (cloudErr) {
+        console.warn('Could not query utility_bills from Supabase:', cloudErr?.message);
+      }
+    }
+
     const raw = await AsyncStorage.getItem(UTILITY_STORAGE_KEY);
     const all = raw ? JSON.parse(raw) : {};
-    if (all[key]) {
-      return all[key];
+    const local = all[key] || getDefaultTenantUtilities(unitNumber, city);
+
+    if (cloudHistory.length > 0) {
+      // Merge cloud history with local state
+      const mergedHistoryMap = new Map();
+      [...cloudHistory, ...(local.history || [])].forEach((item) => {
+        const itemKey = item.txnId || item.id;
+        if (!mergedHistoryMap.has(itemKey)) {
+          mergedHistoryMap.set(itemKey, item);
+        }
+      });
+      local.history = Array.from(mergedHistoryMap.values());
     }
-    const defaults = getDefaultTenantUtilities(unitNumber, city);
-    all[key] = defaults;
-    await AsyncStorage.setItem(UTILITY_STORAGE_KEY, JSON.stringify(all));
-    return defaults;
+
+    all[key] = local;
+    AsyncStorage.setItem(UTILITY_STORAGE_KEY, JSON.stringify(all)).catch(() => {});
+    return local;
   } catch (err) {
     console.warn('Error loading utility bills:', err);
     return getDefaultTenantUtilities(unitNumber, city);
@@ -260,6 +306,7 @@ export async function updateTenantUtilityBill(tenantId, billType, updates, unitN
  */
 export async function markUtilityBillPaid(tenantId, billType, { txnId, method, paidAt }, unitNumber = '101', city = 'Bangalore') {
   const key = tenantId ? String(tenantId).toLowerCase() : 'default-tenant';
+  const isUuid = tenantId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(tenantId));
   const current = await getTenantUtilityBills(tenantId, unitNumber, city);
   const target = current[billType];
   if (!target) return current;
@@ -306,6 +353,33 @@ export async function markUtilityBillPaid(tenantId, billType, { txnId, method, p
     await AsyncStorage.setItem(UTILITY_STORAGE_KEY, JSON.stringify(all));
   } catch (err) {
     console.warn('Error recording utility bill payment:', err);
+  }
+
+  // Persist to Supabase utility_bills table
+  if (isUuid) {
+    try {
+      const { data: authUser } = await supabase.auth.getUser();
+      await supabase.from('utility_bills').insert({
+        tenant_id: tenantId,
+        user_id: authUser?.user?.id ?? null,
+        bill_type: billType,
+        title: target.title || `${billType} Bill`,
+        department_code: target.departmentCode,
+        department_name: target.departmentName,
+        department_short_name: target.departmentShortName,
+        department_upi_id: target.departmentUpiId,
+        consumer_number: target.consumerNumber,
+        billing_month: target.billingMonth,
+        amount: target.amount,
+        due_date: target.dueDate,
+        status: 'paid',
+        paid_at: timestamp,
+        txn_id: finalTxnId,
+        payment_method: method,
+      });
+    } catch (dbErr) {
+      console.warn('Could not persist utility bill payment to Supabase:', dbErr?.message);
+    }
   }
 
   return { nextState, historyEntry };

@@ -26,6 +26,7 @@ import StatusChip from '../../components/StatusChip';
 import PrimaryButton from '../../components/PrimaryButton';
 import { buildReceiptHTML } from '../../lib/receiptHTML';
 import { getTenantUtilityBills } from '../../lib/utilityBills';
+import { scheduleRentReminder } from '../../lib/notifications';
 import { RateLimitedButton } from '../../components/RateLimitedButton';
 import {
   fetchCurrentRentObligation,
@@ -154,7 +155,7 @@ export default function PaymentHistoryScreen({ navigation }) {
     setLoading(true);
 
     // Ensure server-owned current month rent obligation is derived before reading payments
-    await fetchCurrentRentObligation().catch(() => {});
+    const { data: canonicalObligation } = await fetchCurrentRentObligation().catch(() => ({}));
 
     const { data: tenantRows, error: tenantError } = await supabase
       .from('tenants')
@@ -218,9 +219,11 @@ export default function PaymentHistoryScreen({ navigation }) {
     
     const allPayments = paymentsRes.data ?? [];
     setPayments(allPayments);
-    setPendingPayment(
-      allPayments.find(p => ['pending', 'overdue', 'under_review', 'reversed'].includes(p.status)) ?? null
-    );
+    // Prioritize the canonical server-derived obligation order (earliest overdue/actionable first)
+    const earliestPending = canonicalObligation?.payment
+      ?? [...allPayments].reverse().find(p => ['pending', 'overdue', 'under_review', 'reversed'].includes(p.status))
+      ?? null;
+    setPendingPayment(earliestPending);
     
     setLoading(false);
     setRefreshing(false);
@@ -393,6 +396,18 @@ export default function PaymentHistoryScreen({ navigation }) {
         setAutoPayEnabled(enabled);
         setAutoPayDay(day);
         setAutoPayMethod(methodId || '');
+
+        if (enabled) {
+          const now = new Date();
+          let targetDate = new Date(now.getFullYear(), now.getMonth(), day, 9, 0, 0);
+          if (targetDate.getTime() <= now.getTime()) {
+            targetDate = new Date(now.getFullYear(), now.getMonth() + 1, day, 9, 0, 0);
+          }
+          scheduleRentReminder({
+            amount: activeLease?.monthly_rent || 15000,
+            dueDate: targetDate.toISOString(),
+          });
+        }
       }
     } catch (e) {
       console.log('Error executing upsert query:', e);
@@ -475,7 +490,7 @@ export default function PaymentHistoryScreen({ navigation }) {
             <TouchableOpacity 
               style={styles.heroPrimaryBtn}
               onPress={() => {
-                navigation.navigate('RentPayment');
+                navigation.navigate('RentPayment', { paymentId: pendingPayment?.id });
               }}
             >
               <Text style={styles.heroPrimaryBtnText}>
@@ -704,8 +719,25 @@ export default function PaymentHistoryScreen({ navigation }) {
               <MaterialIcons name="autorenew" size={20} color={colors.primary} />
             </View>
             <View style={styles.menuInfo}>
-              <Text style={styles.menuTitle}>Auto-Payments</Text>
-              <Text style={styles.menuSubtitle}>Set up payments to give you peace of mind.</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={styles.menuTitle}>Auto-Payments</Text>
+                <View style={[
+                  styles.autoPayBadge,
+                  autoPayEnabled ? styles.autoPayBadgeActive : styles.autoPayBadgeInactive
+                ]}>
+                  <Text style={[
+                    styles.autoPayBadgeText,
+                    autoPayEnabled ? styles.autoPayBadgeTextActive : styles.autoPayBadgeTextInactive
+                  ]}>
+                    {autoPayEnabled ? `Reminder: ${autoPayDay}th` : 'Off'}
+                  </Text>
+                </View>
+              </View>
+              <Text style={styles.menuSubtitle}>
+                {autoPayEnabled
+                  ? `Scheduled reminder on the ${autoPayDay}th with 1-tap checkout`
+                  : 'Configure monthly rent reminders and payment preferences'}
+              </Text>
             </View>
             <MaterialIcons name="keyboard-arrow-right" size={24} color={colors.outline} />
           </TouchableOpacity>
@@ -939,9 +971,9 @@ export default function PaymentHistoryScreen({ navigation }) {
             <View style={styles.autoPayBody}>
               <View style={styles.toggleRow}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.toggleLabel}>Enable Auto-Pay</Text>
+                  <Text style={styles.toggleLabel}>Monthly Rent Reminder & 1-Tap Pay</Text>
                   <Text style={styles.toggleSub}>
-                    Deducts due rent automatically every month.
+                    Sends an alert on your chosen day with 1-tap checkout.
                   </Text>
                 </View>
                 <Switch
@@ -1013,14 +1045,11 @@ export default function PaymentHistoryScreen({ navigation }) {
                   <View style={styles.summaryBox}>
                     <MaterialIcons name="info" size={16} color={colors.primary} />
                     <Text style={styles.summaryBoxText}>
-                      Every month on the <Text style={{ fontFamily: fonts.interBold }}>{autoPayDay}th</Text>, a payment of{' '}
+                      Every month on the <Text style={{ fontFamily: fonts.interBold }}>{autoPayDay}th</Text>, you will receive a scheduled 1-tap checkout prompt for{' '}
                       <Text style={{ fontFamily: fonts.interBold, color: colors.tertiaryFixedDim }}>
                         ₹{Number(activeLease?.monthly_rent ?? 15000).toLocaleString('en-IN')}
                       </Text>{' '}
-                      will be processed automatically using{' '}
-                      <Text style={{ fontFamily: fonts.interBold }}>
-                        {selectedMethodObj ? selectedMethodObj.label : 'Saved Method'}
-                      </Text>.
+                      with your preferred method ({selectedMethodObj ? selectedMethodObj.label : 'Saved Method'}) pre-selected.
                     </Text>
                   </View>
                 </View>
@@ -1268,6 +1297,27 @@ const getStyles = (colors, theme) => StyleSheet.create({
     fontSize: 12,
     color: colors.onSurfaceVariant,
     lineHeight: 16,
+  },
+  autoPayBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  autoPayBadgeActive: {
+    backgroundColor: `${colors.tertiaryFixedDim}25`,
+  },
+  autoPayBadgeInactive: {
+    backgroundColor: `${colors.outlineVariant}30`,
+  },
+  autoPayBadgeText: {
+    fontFamily: fonts.interSemiBold,
+    fontSize: 10.5,
+  },
+  autoPayBadgeTextActive: {
+    color: colors.tertiaryFixedDim,
+  },
+  autoPayBadgeTextInactive: {
+    color: colors.onSurfaceVariant,
   },
   menuDivider: {
     height: 1,

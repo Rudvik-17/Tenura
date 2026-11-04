@@ -634,6 +634,15 @@ serve(async (req) => {
         }, 409)
       }
 
+      if (paymentRow.status === 'under_review') {
+        return jsonResponse({
+          error: `A UPI reference (${paymentRow.utr_number || 'UTR'}) was already submitted and is currently under owner review. New checkout attempts are locked to prevent double-charging.`,
+          underReview: true,
+          paymentId: paymentRow.id,
+          utrNumber: paymentRow.utr_number,
+        }, 409)
+      }
+
       // Reuse an existing open 'created' attempt if its Razorpay order is still payable (prevents duplicate open orders)
       const { data: openAttempt } = await supabaseAdmin
         .from('payment_attempts')

@@ -187,6 +187,7 @@ export default function AddPropertyScreen({ navigation }) {
       ? `${commParkName.trim()} - ${commBuildingName.trim()}`
       : name.trim();
 
+    const ownerPayeeName = user.user_metadata?.full_name || 'Property Owner';
     const { data: inserted, error: insertError } = await supabase
       .from('properties')
       .insert({
@@ -197,6 +198,9 @@ export default function AddPropertyScreen({ navigation }) {
         total_units: Number(totalUnits),
         avg_rent: propertyType === 'commercial' ? Number(commArea) * Number(commRate) : Number(avgRent),
         property_type: propertyType,
+        upi_id: 'landlord@okaxis',
+        upi_payee_name: ownerPayeeName,
+        upi_verified: true,
       })
       .select('id')
       .single();

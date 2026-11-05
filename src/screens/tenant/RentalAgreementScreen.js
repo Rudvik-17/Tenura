@@ -21,6 +21,7 @@ import PrimaryButton from '../../components/PrimaryButton';
 import StatusChip from '../../components/StatusChip';
 import { buildLeaseAgreementHTML } from '../../lib/leaseAgreementHTML';
 import { RateLimitedButton } from '../../components/RateLimitedButton';
+import { getTenantDeposit } from '../../lib/securityDeposit';
 
 const CLAUSES = [
   {
@@ -30,6 +31,10 @@ const CLAUSES = [
   {
     title: 'Maintenance Responsibilities',
     body: 'Tenant is responsible for minor day-to-day maintenance. Structural repairs, plumbing, and electrical issues must be reported via the Tenura maintenance portal within 24 hours of discovery.',
+  },
+  {
+    title: 'Security Deposit & Vacating Terms',
+    body: 'The security deposit set by the owner is collected in advance prior to possession and key handover. The deposit is refundable upon vacating the premises, subject to deductions for painting, damages beyond normal wear and tear, and unpaid utility dues.',
   },
   {
     title: 'Lease Termination',
@@ -47,6 +52,7 @@ export default function RentalAgreementScreen({ navigation, route }) {
   const [lease, setLease] = useState(null);
   const [tenant, setTenant] = useState(null);
   const [ownerName, setOwnerName] = useState(null);
+  const [deposit, setDeposit] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [expanded, setExpanded] = useState({});
@@ -59,7 +65,7 @@ export default function RentalAgreementScreen({ navigation, route }) {
     setError(null);
     let query = supabase
       .from('leases')
-      .select('*, properties(name, address, city), tenants(full_name, unit_number, owner_id)');
+      .select('*, properties(name, address, city), tenants(id, full_name, unit_number, owner_id)');
 
     if (leaseId) {
       query = query.eq('id', leaseId);
@@ -79,6 +85,16 @@ export default function RentalAgreementScreen({ navigation, route }) {
     setLease(data);
     setTenant(data?.tenants);
     setSigned(!!data?.signed_at);
+
+    if (data?.tenants) {
+      const depInfo = await getTenantDeposit(
+        data.tenants.id || data.tenant_id,
+        data.tenants.full_name,
+        data.monthly_rent,
+        data.tenants.security_deposit
+      );
+      setDeposit(depInfo);
+    }
 
     if (data?.tenants?.owner_id) {
       const { data: ownerRows } = await supabase
@@ -110,7 +126,7 @@ export default function RentalAgreementScreen({ navigation, route }) {
         monthlyRent: lease.monthly_rent,
         startDate: lease.start_date,
         endDate: lease.end_date,
-        securityDeposit: null,
+        securityDeposit: deposit?.amount ?? null,
         agreementDate: lease.signed_at ?? lease.start_date,
       });
       const { uri } = await Print.printToFileAsync({ html, base64: false });
@@ -211,6 +227,14 @@ export default function RentalAgreementScreen({ navigation, route }) {
               ₹{Number(lease.monthly_rent).toLocaleString('en-IN')}
             </Text>
           </View>
+          {deposit?.amount ? (
+            <View style={styles.metaRow}>
+              <Text style={styles.metaKey}>Security Deposit</Text>
+              <Text style={[styles.metaVal, { color: colors.primary }]}>
+                ₹{Number(deposit.amount).toLocaleString('en-IN')}
+              </Text>
+            </View>
+          ) : null}
           {lease.signed_at ? (
             <View style={styles.metaRow}>
               <Text style={styles.metaKey}>Signed On</Text>

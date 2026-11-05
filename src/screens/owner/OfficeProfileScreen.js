@@ -15,12 +15,14 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
-import { colors } from '../../theme/colors';
+import { useTheme } from '../../context/ThemeContext';
 import { fonts } from '../../theme/typography';
 import ScreenHeader from '../../components/ScreenHeader';
 import PrimaryButton from '../../components/PrimaryButton';
 
 export default function OfficeProfileScreen({ navigation }) {
+  const { colors } = useTheme();
+  const styles = getStyles(colors);
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
 
@@ -174,7 +176,7 @@ export default function OfficeProfileScreen({ navigation }) {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.surface,

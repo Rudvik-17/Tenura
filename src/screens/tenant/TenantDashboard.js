@@ -10,22 +10,26 @@ import {
   RefreshControl,
   Alert,
   Linking,
+  Modal,
+  Platform,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
-import * as FileSystem from 'expo-file-system/legacy';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import { fonts } from '../../theme/typography';
 import { buildLeaseAgreementHTML } from '../../lib/leaseAgreementHTML';
+import { getTenantDeposit } from '../../lib/securityDeposit';
+import { getTenantUtilityBills } from '../../lib/utilityBills';
 import ScreenHeader from '../../components/ScreenHeader';
 import SectionHeader from '../../components/SectionHeader';
 import StatusChip from '../../components/StatusChip';
 import { RateLimitedButton } from '../../components/RateLimitedButton';
 import { RateLimitedIconButton } from '../../components/RateLimitedIconButton';
+import { fetchCurrentRentObligation } from '../../services/razorpayService';
 
 // DocuSign status → display config
 const DOCUSIGN_STATUS_CONFIG = {
@@ -49,6 +53,9 @@ export default function TenantDashboard({ navigation }) {
   const [ownerInfo, setOwnerInfo] = useState(null);
   const [pendingPayment, setPendingPayment] = useState(null);
   const [activeIssues, setActiveIssues] = useState([]);
+  const [securityDeposit, setSecurityDeposit] = useState(null);
+  const [utilityBills, setUtilityBills] = useState(null);
+  const [depositModalVisible, setDepositModalVisible] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -58,6 +65,9 @@ export default function TenantDashboard({ navigation }) {
     if (!user) return;
     setError(null);
     setLoading(true);
+
+    // Ensure server-owned rent obligation for current billing month exists
+    await fetchCurrentRentObligation().catch(() => {});
 
     // Use limit(1) + array access instead of .single() to handle both
     // zero-row and multi-row cases without throwing a Supabase error.
@@ -107,12 +117,12 @@ export default function TenantDashboard({ navigation }) {
         .eq('status', 'active')
         .order('end_date', { ascending: false })
         .limit(1),
-      // Earliest pending/overdue payment — maybeSingle returns null (not error) on 0 rows
+      // Earliest outstanding payment (including unverified UPI under_review and reversed)
       supabase
         .from('payments')
         .select('*')
         .eq('tenant_id', tenantData.id)
-        .in('status', ['pending', 'overdue'])
+        .in('status', ['pending', 'overdue', 'under_review', 'reversed'])
         .order('due_date', { ascending: true })
         .limit(1),
       supabase
@@ -123,9 +133,32 @@ export default function TenantDashboard({ navigation }) {
         .order('created_at', { ascending: false }),
     ]);
 
-    setLease(leaseRes.data?.[0] ?? null);
+    const activeLease = leaseRes.data?.[0] ?? null;
+    setLease(activeLease);
     setPendingPayment(paymentRes.data?.[0] ?? null);
     setActiveIssues(issuesRes.data ?? []);
+
+    // Load tenant security deposit & utility bills
+    try {
+      const [depInfo, utilInfo] = await Promise.all([
+        getTenantDeposit(
+          tenantData.id,
+          tenantData.full_name,
+          activeLease?.monthly_rent ?? 0,
+          tenantData.security_deposit
+        ),
+        getTenantUtilityBills(
+          tenantData.id,
+          tenantData.unit_number || '101',
+          tenantData.properties?.city || 'Bangalore'
+        ),
+      ]);
+      setSecurityDeposit(depInfo);
+      setUtilityBills(utilInfo);
+    } catch (depErr) {
+      console.warn('Error fetching tenant deposit/utilities:', depErr);
+    }
+
     setLoading(false);
     setRefreshing(false);
   }, [user?.id]);
@@ -140,32 +173,20 @@ export default function TenantDashboard({ navigation }) {
     if (!lease || !tenantProfile) return;
     setDownloading(true);
     try {
-      let uri;
-
-      if (lease.document_url) {
-        console.log('Downloading signed PDF from:', lease.document_url);
-        const filename = `Lease_Agreement_${lease.id.substring(0, 8)}.pdf`;
-        const localUri = `${FileSystem.documentDirectory}${filename}`;
-        const downloadResult = await FileSystem.downloadAsync(lease.document_url, localUri);
-        uri = downloadResult.uri;
-      } else {
-        const property = tenantProfile.properties;
-        const html = buildLeaseAgreementHTML({
-          landlordName: ownerName ?? 'Landlord',
-          tenantName: tenantProfile.full_name,
-          propertyName: property?.name ?? 'Property',
-          propertyAddress: property ? `${property.address}, ${property.city}` : '—',
-          unitNumber: tenantProfile.unit_number,
-          monthlyRent: lease.monthly_rent,
-          startDate: lease.start_date,
-          endDate: lease.end_date,
-          securityDeposit: null,
-          agreementDate: lease.signed_at ?? lease.start_date,
-        });
-        const printResult = await Print.printToFileAsync({ html, base64: false });
-        uri = printResult.uri;
-      }
-
+      const property = tenantProfile.properties;
+      const html = buildLeaseAgreementHTML({
+        landlordName: ownerName ?? 'Landlord',
+        tenantName: tenantProfile.full_name,
+        propertyName: property?.name ?? 'Property',
+        propertyAddress: property ? `${property.address}, ${property.city}` : '—',
+        unitNumber: tenantProfile.unit_number,
+        monthlyRent: lease.monthly_rent,
+        startDate: lease.start_date,
+        endDate: lease.end_date,
+        securityDeposit: securityDeposit?.amount ?? null,
+        agreementDate: lease.signed_at ?? lease.start_date,
+      });
+      const { uri } = await Print.printToFileAsync({ html, base64: false });
       const canShare = await Sharing.isAvailableAsync();
       if (canShare) {
         await Sharing.shareAsync(uri, {
@@ -174,9 +195,8 @@ export default function TenantDashboard({ navigation }) {
           UTI: 'com.adobe.pdf',
         });
       }
-    } catch (err) {
-      console.error('Error sharing PDF:', err.message);
-      Alert.alert('Error', 'Could not share PDF. Please try again.');
+    } catch {
+      Alert.alert('Error', 'Could not generate PDF. Please try again.');
     } finally {
       setDownloading(false);
     }
@@ -189,24 +209,10 @@ export default function TenantDashboard({ navigation }) {
     Alert.alert(
       'Rent Balance',
       pendingPayment
-        ? `Your current rent payment of ₹${Number(pendingPayment.amount).toLocaleString('en-IN')} is due on ${formatDate(pendingPayment.due_date)}.`
+        ? pendingPayment.status === 'under_review'
+          ? `Your submitted UPI reference (${pendingPayment.utr_number || 'UTR'}) for ₹${Number(pendingPayment.amount).toLocaleString('en-IN')} is under owner review. Your rent obligation remains outstanding until settlement is confirmed.`
+          : `Your current rent payment of ₹${Number(pendingPayment.amount).toLocaleString('en-IN')} is due on ${formatDate(pendingPayment.due_date)}.`
         : 'You have no outstanding rent payments. All payments are up to date!'
-    );
-  };
-
-  const handleContactPress = () => {
-    if (!ownerInfo) {
-      Alert.alert('Contact Landlord', 'Landlord contact information is not available.');
-      return;
-    }
-    Alert.alert(
-      `Contact ${ownerInfo.full_name || 'Landlord'}`,
-      `Phone: ${ownerInfo.phone || 'Not provided'}\nEmail: ${ownerInfo.email || 'Not provided'}`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        ownerInfo.phone ? { text: 'Call', onPress: () => Linking.openURL(`tel:${ownerInfo.phone}`) } : null,
-        ownerInfo.email ? { text: 'Email', onPress: () => Linking.openURL(`mailto:${ownerInfo.email}`) } : null,
-      ].filter(Boolean)
     );
   };
 
@@ -271,7 +277,11 @@ export default function TenantDashboard({ navigation }) {
                 {pendingPayment
                   ? pendingPayment.status === 'overdue'
                     ? 'BALANCE OVERDUE'
-                    : 'BALANCE DUE'
+                    : pendingPayment.status === 'under_review'
+                      ? 'UNDER OWNER REVIEW (OUTSTANDING)'
+                      : pendingPayment.status === 'reversed'
+                        ? 'PAYMENT REVERSED — DUE'
+                        : 'BALANCE DUE'
                   : 'NO BALANCE DUE'}
               </Text>
               <TouchableOpacity onPress={handleBalanceInfoPress} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
@@ -283,7 +293,9 @@ export default function TenantDashboard({ navigation }) {
             </Text>
             {pendingPayment?.due_date ? (
               <Text style={styles.balanceDueText}>
-                Due {formatDate(pendingPayment.due_date)}
+                {pendingPayment.status === 'under_review'
+                  ? `Due ${formatDate(pendingPayment.due_date)} · Awaiting UTR verification`
+                  : `Due ${formatDate(pendingPayment.due_date)}`}
               </Text>
             ) : (
               <Text style={styles.balanceDueText}>All systems optimal</Text>
@@ -295,7 +307,9 @@ export default function TenantDashboard({ navigation }) {
             onPress={() => navigation.getParent().navigate('Payments', { screen: 'RentPayment' })}
             activeOpacity={0.8}
           >
-            <Text style={styles.makePaymentBtnText}>Make Payment</Text>
+            <Text style={styles.makePaymentBtnText}>
+              {pendingPayment?.status === 'under_review' ? 'View Status' : 'Make Payment'}
+            </Text>
           </RateLimitedButton>
         </View>
 
@@ -303,40 +317,7 @@ export default function TenantDashboard({ navigation }) {
         <View style={styles.quickLinksSection}>
           <Text style={styles.quickLinksTitle}>Quick Links</Text>
           <View style={styles.quickLinksRow}>
-            {/* Link 1: Request Maintenance */}
-            <View style={styles.quickLinkItem}>
-              <RateLimitedButton
-                style={styles.quickLinkCircle}
-                onPress={() => {
-                  navigation.navigate('Maintenance', {
-                    screen: 'MaintenanceRequest',
-                    params: { showForm: true },
-                  });
-                }}
-                activeOpacity={0.7}
-              >
-                <MaterialIcons name="build" size={26} color={colors.onPrimary} />
-              </RateLimitedButton>
-              <Text style={styles.quickLinkLabel} numberOfLines={2}>
-                Request{'\n'}Maintenance
-              </Text>
-            </View>
-
-            {/* Link 2: Contact Us */}
-            <View style={styles.quickLinkItem}>
-              <RateLimitedButton
-                style={styles.quickLinkCircle}
-                onPress={handleContactPress}
-                activeOpacity={0.7}
-              >
-                <MaterialIcons name="smartphone" size={26} color={colors.onPrimary} />
-              </RateLimitedButton>
-              <Text style={styles.quickLinkLabel} numberOfLines={2}>
-                Contact Us
-              </Text>
-            </View>
-
-            {/* Link 3: View Documents */}
+            {/* Link 1: View Documents */}
             <View style={styles.quickLinkItem}>
               <RateLimitedButton
                 style={styles.quickLinkCircle}
@@ -349,8 +330,172 @@ export default function TenantDashboard({ navigation }) {
                 View{'\n'}Documents
               </Text>
             </View>
+
+            {/* Link 2: Utility Bills (Water & Electricity) */}
+            <View style={styles.quickLinkItem}>
+              <RateLimitedButton
+                style={styles.quickLinkCircle}
+                onPress={() => navigation.getParent()?.navigate('Payments', { screen: 'UtilityBills', params: { initialBillType: 'electricity' } })}
+                activeOpacity={0.7}
+              >
+                <MaterialIcons name="bolt" size={26} color={colors.onPrimary} />
+              </RateLimitedButton>
+              <Text style={styles.quickLinkLabel} numberOfLines={2}>
+                Water &{'\n'}Electricity
+              </Text>
+            </View>
+
+            {/* Link 3: Security Deposit */}
+            <View style={styles.quickLinkItem}>
+              <RateLimitedButton
+                style={styles.quickLinkCircle}
+                onPress={() => setDepositModalVisible(true)}
+                activeOpacity={0.7}
+              >
+                <MaterialIcons name="shield" size={26} color={colors.onPrimary} />
+              </RateLimitedButton>
+              <Text style={styles.quickLinkLabel} numberOfLines={2}>
+                Security{'\n'}Deposit
+              </Text>
+            </View>
           </View>
         </View>
+
+        {/* Water & Electricity Bills Card Section */}
+        {utilityBills && (
+          <View style={styles.section}>
+            <SectionHeader
+              title="Water & Electricity Bills"
+              actionLabel="Pay via UPI"
+              onAction={() => navigation.getParent()?.navigate('Payments', { screen: 'UtilityBills', params: { initialBillType: 'electricity' } })}
+            />
+            <View style={styles.utilityDashboardRow}>
+              <TouchableOpacity
+                style={styles.utilityDashCard}
+                activeOpacity={0.8}
+                onPress={() => navigation.getParent()?.navigate('Payments', { screen: 'UtilityBills', params: { initialBillType: 'electricity' } })}
+              >
+                <View style={styles.utilityDashTop}>
+                  <View style={[styles.depositIconCircle, { width: 36, height: 36, backgroundColor: `${colors.primary}15` }]}>
+                    <MaterialIcons name="bolt" size={20} color={colors.primary} />
+                  </View>
+                  <StatusChip
+                    label={utilityBills.electricity?.status === 'paid' ? 'Paid' : 'Due'}
+                    variant={utilityBills.electricity?.status === 'paid' ? 'active' : 'pending'}
+                  />
+                </View>
+                <Text style={styles.utilityDashTitle}>Electricity Bill</Text>
+                <Text style={styles.utilityDashDept} numberOfLines={1}>
+                  {utilityBills.electricity?.departmentShortName}
+                </Text>
+                <Text style={styles.utilityDashAmount}>
+                  ₹{Number(utilityBills.electricity?.amount || 0).toLocaleString('en-IN')}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.utilityDashCard}
+                activeOpacity={0.8}
+                onPress={() => navigation.getParent()?.navigate('Payments', { screen: 'UtilityBills', params: { initialBillType: 'water' } })}
+              >
+                <View style={styles.utilityDashTop}>
+                  <View style={[styles.depositIconCircle, { width: 36, height: 36, backgroundColor: `${colors.tertiaryFixedDim}18` }]}>
+                    <MaterialIcons name="water-drop" size={18} color={colors.tertiaryFixedDim} />
+                  </View>
+                  <StatusChip
+                    label={utilityBills.water?.status === 'paid' ? 'Paid' : 'Due'}
+                    variant={utilityBills.water?.status === 'paid' ? 'active' : 'pending'}
+                  />
+                </View>
+                <Text style={styles.utilityDashTitle}>Water Bill</Text>
+                <Text style={styles.utilityDashDept} numberOfLines={1}>
+                  {utilityBills.water?.departmentShortName}
+                </Text>
+                <Text style={styles.utilityDashAmount}>
+                  ₹{Number(utilityBills.water?.amount || 0).toLocaleString('en-IN')}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
+        {/* Security Deposit Card Section */}
+        {securityDeposit && (
+          <View style={styles.section}>
+            <SectionHeader
+              title="Security Deposit"
+              actionLabel="View Details"
+              onAction={() => setDepositModalVisible(true)}
+            />
+            <TouchableOpacity
+              style={styles.depositCard}
+              activeOpacity={0.8}
+              onPress={() => setDepositModalVisible(true)}
+            >
+              <View style={styles.depositCardHeader}>
+                <View style={styles.depositCardLeft}>
+                  <View style={[styles.depositIconCircle, { backgroundColor: `${colors.primary}15` }]}>
+                    <MaterialIcons name="shield" size={22} color={colors.primary} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <View style={styles.depositTitleRow}>
+                      <Text style={styles.depositCardTitle}>Deposit Set by Landlord</Text>
+                      <View style={[styles.depositTag, {
+                        backgroundColor: securityDeposit.status === 'collected' ? `${colors.tertiaryFixedDim}18` : `${colors.secondary}18`
+                      }]}>
+                        <Text style={[styles.depositTagText, {
+                          color: securityDeposit.status === 'collected' ? colors.tertiaryFixedDim : colors.secondary
+                        }]}>
+                          {securityDeposit.status === 'collected' ? 'Advance Paid' : 'Pending Payment'}
+                        </Text>
+                      </View>
+                    </View>
+                    <Text style={styles.depositCardDesc}>
+                      {securityDeposit.status === 'collected'
+                        ? 'Paid in advance before handover · Refundable upon vacating'
+                        : 'Awaiting advance payment before move-in'}
+                    </Text>
+                  </View>
+                </View>
+                <Text style={styles.depositCardValue}>
+                  ₹{Number(securityDeposit.amount).toLocaleString('en-IN')}
+                </Text>
+              </View>
+
+              {/* Deductions if any */}
+              {securityDeposit.deductions?.length > 0 && (
+                <View style={styles.depositDeductionBox}>
+                  <View style={styles.depositDeductionHeader}>
+                    <Text style={styles.depositDeductionTitle}>Move-Out Deductions (Paint, Repairs):</Text>
+                    <Text style={styles.depositDeductionTotal}>
+                      -₹{Number(securityDeposit.totalDeductions).toLocaleString('en-IN')}
+                    </Text>
+                  </View>
+                  {securityDeposit.deductions.map((d) => (
+                    <View key={d.id} style={styles.depositDeductionItem}>
+                      <Text style={styles.depositDeductionItemName}>• {d.title}</Text>
+                      <Text style={styles.depositDeductionItemVal}>-₹{Number(d.amount).toLocaleString('en-IN')}</Text>
+                    </View>
+                  ))}
+                  <View style={styles.depositDeductionDivider} />
+                  <View style={styles.depositDeductionHeader}>
+                    <Text style={styles.depositNetRefundLabel}>Refund Payable to You:</Text>
+                    <Text style={styles.depositNetRefundVal}>
+                      ₹{Number(securityDeposit.netRefund).toLocaleString('en-IN')}
+                    </Text>
+                  </View>
+                </View>
+              )}
+
+              <View style={styles.depositCardFooter}>
+                <MaterialIcons name="info-outline" size={13} color={colors.outline} />
+                <Text style={styles.depositCardFooterText}>
+                  Tap to view full security deposit terms, paint and maintenance policies.
+                </Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Home Status */}
         <View style={styles.section}>
@@ -446,6 +591,101 @@ export default function TenantDashboard({ navigation }) {
           )}
         </View>
       </ScrollView>
+
+      {/* ── Security Deposit Statement Modal ── */}
+      <Modal
+        visible={depositModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setDepositModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <View style={[styles.depositIconCircle, { backgroundColor: `${colors.primary}15` }]}>
+                  <MaterialIcons name="shield" size={24} color={colors.primary} />
+                </View>
+                <View>
+                  <Text style={styles.modalTitle}>Security Deposit Details</Text>
+                  <Text style={styles.modalSubtitle}>Unit {tenantProfile?.unit_number} · {tenantProfile?.properties?.name}</Text>
+                </View>
+              </View>
+              <TouchableOpacity onPress={() => setDepositModalVisible(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <MaterialIcons name="close" size={24} color={colors.onSurface} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 480 }}>
+              <View style={styles.modalSummaryBox}>
+                <Text style={styles.modalDepositLabel}>TOTAL SECURITY DEPOSIT</Text>
+                <Text style={styles.modalDepositVal}>
+                  ₹{Number(securityDeposit?.amount || 0).toLocaleString('en-IN')}
+                </Text>
+                <View style={styles.modalBadgeRow}>
+                  <View style={[styles.depositStatusBadge, {
+                    backgroundColor: securityDeposit?.status === 'collected' ? `${colors.tertiaryFixedDim}20` : `${colors.secondary}20`,
+                  }]}>
+                    <MaterialIcons
+                      name={securityDeposit?.status === 'collected' ? 'check-circle' : 'schedule'}
+                      size={14}
+                      color={securityDeposit?.status === 'collected' ? colors.tertiaryFixedDim : colors.secondary}
+                    />
+                    <Text style={[styles.depositStatusText, {
+                      color: securityDeposit?.status === 'collected' ? colors.tertiaryFixedDim : colors.secondary,
+                    }]}>
+                      {securityDeposit?.status === 'collected' ? 'Collected Upfront (Before Handover)' : 'Pending Advance Payment'}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+
+              {/* Deductions section */}
+              {securityDeposit?.deductions?.length > 0 ? (
+                <View style={styles.modalSectionBox}>
+                  <Text style={styles.modalSectionTitle}>MOVE-OUT INSPECTION DEDUCTIONS</Text>
+                  <Text style={styles.modalSectionSub}>
+                    Deductions made by the landlord for paint, damages, or unpaid bills:
+                  </Text>
+                  {securityDeposit.deductions.map(d => (
+                    <View key={d.id} style={styles.modalDeductionRow}>
+                      <Text style={styles.modalDeductionName}>• {d.title}</Text>
+                      <Text style={styles.modalDeductionCost}>-₹{Number(d.amount).toLocaleString('en-IN')}</Text>
+                    </View>
+                  ))}
+                  <View style={styles.modalDivider} />
+                  <View style={styles.modalDeductionRow}>
+                    <Text style={styles.modalNetLabel}>Net Refund to Tenant:</Text>
+                    <Text style={styles.modalNetVal}>₹{Number(securityDeposit.netRefund).toLocaleString('en-IN')}</Text>
+                  </View>
+                </View>
+              ) : null}
+
+              {/* Terms & Guidance */}
+              <View style={styles.modalTermsBox}>
+                <Text style={styles.modalTermsTitle}>Deposit Rules & Handover Terms</Text>
+                <Text style={styles.modalTermsItem}>
+                  1. <Text style={{ fontFamily: fonts.interSemiBold }}>Advance Payment:</Text> The security deposit is set by your landlord and collected in advance prior to handing over the keys.
+                </Text>
+                <Text style={styles.modalTermsItem}>
+                  2. <Text style={{ fontFamily: fonts.interSemiBold }}>Move-Out Inspection:</Text> When you vacate, the landlord conducts a walkthrough inspection for paint condition, deep cleaning, and any damage beyond normal wear and tear.
+                </Text>
+                <Text style={styles.modalTermsItem}>
+                  3. <Text style={{ fontFamily: fonts.interSemiBold }}>Refund Timeline:</Text> The remaining deposit after agreed deductions is refunded within 30 days of vacating.
+                </Text>
+              </View>
+            </ScrollView>
+
+            <TouchableOpacity
+              style={styles.modalDoneBtn}
+              onPress={() => setDepositModalVisible(false)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.modalDoneBtnText}>Got It</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -527,12 +767,12 @@ const getStyles = (colors) => StyleSheet.create({
   },
   quickLinkItem: {
     alignItems: 'center',
-    width: 100,
+    width: 80,
   },
   quickLinkCircle: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
@@ -545,10 +785,45 @@ const getStyles = (colors) => StyleSheet.create({
   },
   quickLinkLabel: {
     fontFamily: fonts.interMedium,
-    fontSize: 12,
+    fontSize: 11,
     color: colors.onSurface,
     textAlign: 'center',
-    lineHeight: 16,
+    lineHeight: 15,
+  },
+  utilityDashboardRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  utilityDashCard: {
+    flex: 1,
+    backgroundColor: colors.surfaceContainerLowest,
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: `${colors.primary}18`,
+  },
+  utilityDashTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  utilityDashTitle: {
+    fontFamily: fonts.manropeBold,
+    fontSize: 14,
+    color: colors.onSurface,
+  },
+  utilityDashDept: {
+    fontFamily: fonts.interRegular,
+    fontSize: 11,
+    color: colors.onSurfaceVariant,
+    marginTop: 2,
+    marginBottom: 6,
+  },
+  utilityDashAmount: {
+    fontFamily: fonts.manropeBold,
+    fontSize: 18,
+    color: colors.primary,
   },
 
   section: { padding: 20 },
@@ -623,4 +898,281 @@ const getStyles = (colors) => StyleSheet.create({
   errorMsg: { fontFamily: fonts.interRegular, fontSize: 13, color: colors.onSurfaceVariant, textAlign: 'center', marginBottom: 20 },
   retryBtn: { backgroundColor: colors.primary, borderRadius: 8, paddingVertical: 10, paddingHorizontal: 28 },
   retryText: { fontFamily: fonts.interSemiBold, fontSize: 14, color: colors.onPrimary },
+
+  /* Deposit Card Styles */
+  depositCard: {
+    backgroundColor: colors.surfaceContainerLowest,
+    borderRadius: 14,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: `${colors.primary}18`,
+  },
+  depositCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  depositCardLeft: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    flex: 1,
+  },
+  depositIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  depositTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexWrap: 'wrap',
+    marginBottom: 3,
+  },
+  depositCardTitle: {
+    fontFamily: fonts.manropeSemiBold,
+    fontSize: 14,
+    color: colors.onSurface,
+  },
+  depositTag: {
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  depositTagText: {
+    fontFamily: fonts.interMedium,
+    fontSize: 10,
+  },
+  depositCardDesc: {
+    fontFamily: fonts.interRegular,
+    fontSize: 11.5,
+    color: colors.onSurfaceVariant,
+    lineHeight: 16,
+  },
+  depositCardValue: {
+    fontFamily: fonts.manropeBold,
+    fontSize: 17,
+    color: colors.primary,
+  },
+  depositDeductionBox: {
+    backgroundColor: `${colors.error}08`,
+    borderRadius: 10,
+    padding: 10,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: `${colors.error}20`,
+  },
+  depositDeductionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  depositDeductionTitle: {
+    fontFamily: fonts.interSemiBold,
+    fontSize: 11.5,
+    color: colors.error,
+  },
+  depositDeductionTotal: {
+    fontFamily: fonts.manropeBold,
+    fontSize: 12,
+    color: colors.error,
+  },
+  depositDeductionItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginVertical: 2,
+  },
+  depositDeductionItemName: {
+    fontFamily: fonts.interRegular,
+    fontSize: 11,
+    color: colors.onSurfaceVariant,
+  },
+  depositDeductionItemVal: {
+    fontFamily: fonts.interMedium,
+    fontSize: 11,
+    color: colors.error,
+  },
+  depositDeductionDivider: {
+    height: 1,
+    backgroundColor: `${colors.error}25`,
+    marginVertical: 6,
+  },
+  depositNetRefundLabel: {
+    fontFamily: fonts.interBold,
+    fontSize: 12,
+    color: colors.onSurface,
+  },
+  depositNetRefundVal: {
+    fontFamily: fonts.manropeBold,
+    fontSize: 13,
+    color: colors.tertiaryFixedDim,
+  },
+  depositCardFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 10,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: `${colors.outlineVariant}50`,
+  },
+  depositCardFooterText: {
+    fontFamily: fonts.interRegular,
+    fontSize: 11,
+    color: colors.outline,
+    flex: 1,
+  },
+
+  /* Modal Styles */
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    paddingBottom: Platform.OS === 'ios' ? 36 : 24,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontFamily: fonts.manropeBold,
+    fontSize: 18,
+    color: colors.onSurface,
+  },
+  modalSubtitle: {
+    fontFamily: fonts.interRegular,
+    fontSize: 12,
+    color: colors.onSurfaceVariant,
+    marginTop: 2,
+  },
+  modalSummaryBox: {
+    backgroundColor: colors.primaryContainer,
+    borderRadius: 14,
+    padding: 16,
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  modalDepositLabel: {
+    fontFamily: fonts.interSemiBold,
+    fontSize: 11,
+    letterSpacing: 0.8,
+    color: colors.onPrimaryContainer,
+    opacity: 0.7,
+  },
+  modalDepositVal: {
+    fontFamily: fonts.manropeBold,
+    fontSize: 28,
+    color: colors.onPrimaryContainer,
+    marginVertical: 4,
+  },
+  modalBadgeRow: {
+    marginTop: 4,
+  },
+  depositStatusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  depositStatusText: {
+    fontFamily: fonts.interMedium,
+    fontSize: 11,
+  },
+  modalSectionBox: {
+    backgroundColor: colors.surfaceContainerLowest,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 14,
+  },
+  modalSectionTitle: {
+    fontFamily: fonts.interSemiBold,
+    fontSize: 11.5,
+    color: colors.error,
+    letterSpacing: 0.5,
+    marginBottom: 3,
+  },
+  modalSectionSub: {
+    fontFamily: fonts.interRegular,
+    fontSize: 11.5,
+    color: colors.onSurfaceVariant,
+    marginBottom: 8,
+  },
+  modalDeductionRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 3,
+  },
+  modalDeductionName: {
+    fontFamily: fonts.interRegular,
+    fontSize: 12,
+    color: colors.onSurface,
+  },
+  modalDeductionCost: {
+    fontFamily: fonts.interSemiBold,
+    fontSize: 12,
+    color: colors.error,
+  },
+  modalDivider: {
+    height: 1,
+    backgroundColor: colors.outlineVariant,
+    marginVertical: 6,
+    opacity: 0.4,
+  },
+  modalNetLabel: {
+    fontFamily: fonts.interBold,
+    fontSize: 12.5,
+    color: colors.onSurface,
+  },
+  modalNetVal: {
+    fontFamily: fonts.manropeBold,
+    fontSize: 14,
+    color: colors.tertiaryFixedDim,
+  },
+  modalTermsBox: {
+    backgroundColor: colors.surfaceContainerLow,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 16,
+    gap: 8,
+  },
+  modalTermsTitle: {
+    fontFamily: fonts.manropeSemiBold,
+    fontSize: 13,
+    color: colors.onSurface,
+    marginBottom: 2,
+  },
+  modalTermsItem: {
+    fontFamily: fonts.interRegular,
+    fontSize: 11.5,
+    color: colors.onSurfaceVariant,
+    lineHeight: 16,
+  },
+  modalDoneBtn: {
+    backgroundColor: colors.primary,
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  modalDoneBtnText: {
+    fontFamily: fonts.interBold,
+    fontSize: 14,
+    color: colors.onPrimary,
+  },
 });

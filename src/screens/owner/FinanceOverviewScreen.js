@@ -99,9 +99,16 @@ export default function FinanceOverviewScreen({ navigation }) {
 
   const onRefresh = () => { setRefreshing(true); fetchData(); };
 
-  const collected = payments.filter(p => p.status === 'paid').reduce((s, p) => s + Number(p.amount), 0);
-  const pendingAmount = payments.filter(p => p.status === 'pending' || p.status === 'overdue').reduce((s, p) => s + Number(p.amount), 0);
-  const expenses = transactions.filter(t => t.type !== 'rent').reduce((s, t) => s + Number(t.amount), 0);
+  const collected = payments
+    .filter(p => p.status === 'paid' || p.status === 'partially_refunded')
+    .reduce((s, p) => s + Math.max(0, Number(p.amount || 0) - Number(p.refunded_amount || 0)), 0);
+  const pendingAmount = payments
+    .filter(p => ['pending', 'overdue', 'under_review', 'reversed'].includes(p.status))
+    .reduce((s, p) => s + Number(p.amount || 0), 0);
+  const operatingExpenseTransactions = transactions.filter(
+    t => t.type !== 'rent' && !['refund', 'reversal'].includes(t.entry_kind)
+  );
+  const expenses = operatingExpenseTransactions.reduce((s, t) => s + Number(t.amount || 0), 0);
   const netProfit = collected - expenses;
   const margin = collected > 0 ? Math.round((netProfit / collected) * 100) : 0;
 
@@ -111,16 +118,9 @@ export default function FinanceOverviewScreen({ navigation }) {
       total: list.filter(t => t.category === cat).reduce((s, t) => s + Number(t.amount), 0),
     })).filter(c => c.total > 0);
 
-  const expensesByCat = byCategory(transactions.filter(t => t.type !== 'rent'), EXPENSE_CATEGORIES);
+  const expensesByCat = byCategory(operatingExpenseTransactions, EXPENSE_CATEGORIES);
 
-  // Recent activity: paid payments + transactions, newest first
-  const recentPayments = payments
-    .filter(p => p.status === 'paid')
-    .map(p => ({ ...p, _kind: 'payment', _date: p.paid_at ?? p.due_date }));
-  const recentTx = transactions.map(t => ({ ...t, _kind: 'transaction', _date: t.date }));
-  const recentActivity = [...recentPayments, ...recentTx]
-    .sort((a, b) => new Date(b._date) - new Date(a._date))
-    .slice(0, 15);
+
 
   const fmt = (n) => `₹${Number(n).toLocaleString('en-IN')}`;
 
@@ -148,7 +148,7 @@ export default function FinanceOverviewScreen({ navigation }) {
   if (properties.length === 0 && payments.length === 0 && transactions.length === 0) {
     return (
       <View style={styles.container}>
-        <ScreenHeader title="Finance" showProfile={true} />
+        <ScreenHeader title="Finance" showBell />
         <View style={styles.centered}>
           <MaterialIcons name="account-balance-wallet" size={48} color={colors.outline} />
           <Text style={styles.emptyTitle}>No financial data yet</Text>
@@ -164,7 +164,7 @@ export default function FinanceOverviewScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      <ScreenHeader title="Finance" showProfile={true} />
+      <ScreenHeader title="Finance" showBell />
       <ScrollView
         contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
         showsVerticalScrollIndicator={false}
@@ -218,42 +218,43 @@ export default function FinanceOverviewScreen({ navigation }) {
           </View>
         </View>
 
-        {/* Recent activity */}
+        {/* Quick Actions */}
         <View style={styles.section}>
-          <SectionHeader title="Recent Activity" actionLabel="Rent Collection" onAction={() => navigation.navigate('RentCollection')} />
-          {recentActivity.length === 0 ? (
-            <Text style={styles.noDataText}>No activity recorded</Text>
-          ) : (
-            recentActivity.map((item) => {
-              const isPayment = item._kind === 'payment';
-              const label = isPayment
-                ? (item.tenants?.full_name ?? 'Tenant')
-                : (item.description ?? item.category ?? item.type);
-              const dateStr = new Date(item._date).toLocaleDateString('en-IN', {
-                day: 'numeric', month: 'short', year: 'numeric',
-              });
-              return (
-                <View key={item.id} style={styles.lineItem}>
-                  <View style={styles.lineItemLeft}>
-                    <MaterialIcons
-                      name={isPayment ? 'check-circle' : 'receipt'}
-                      size={16}
-                      color={isPayment ? colors.tertiaryFixedDim : colors.onSurfaceVariant}
-                    />
-                    <View>
-                      <Text style={styles.lineItemLabel}>{label}</Text>
-                      <Text style={styles.lineItemDate}>{dateStr}</Text>
-                    </View>
-                  </View>
-                  <Text style={[styles.lineItemAmount, {
-                    color: isPayment ? colors.tertiaryFixedDim : colors.error,
-                  }]}>
-                    {isPayment ? '+' : '-'}{fmt(item.amount)}
-                  </Text>
-                </View>
-              );
-            })
-          )}
+          <SectionHeader title="Quick Actions" />
+          <View style={styles.quickActionsRow}>
+            <TouchableOpacity
+              style={styles.quickActionItem}
+              activeOpacity={0.7}
+              onPress={() => navigation.navigate('RecentActivity')}
+            >
+              <View style={[styles.quickActionIcon, { backgroundColor: `${colors.primary}15` }]}>
+                <MaterialIcons name="history" size={26} color={colors.primary} />
+              </View>
+              <Text style={styles.quickActionLabel}>Recent{'\n'}Activity</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.quickActionItem}
+              activeOpacity={0.7}
+              onPress={() => navigation.navigate('RentCollection')}
+            >
+              <View style={[styles.quickActionIcon, { backgroundColor: `${colors.tertiaryFixedDim}15` }]}>
+                <MaterialIcons name="account-balance-wallet" size={26} color={colors.tertiaryFixedDim} />
+              </View>
+              <Text style={styles.quickActionLabel}>Rent{'\n'}Collection</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.quickActionItem}
+              activeOpacity={0.7}
+              onPress={() => navigation.navigate('SecurityDeposit')}
+            >
+              <View style={[styles.quickActionIcon, { backgroundColor: `${colors.secondary}15` }]}>
+                <MaterialIcons name="account-balance" size={26} color={colors.secondary} />
+              </View>
+              <Text style={styles.quickActionLabel}>Security{'\n'}Deposit</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Expense breakdown */}
@@ -311,6 +312,36 @@ const getStyles = (colors) => StyleSheet.create({
   metricsRow: { flexDirection: 'row' },
 
   section: { padding: 20 },
+
+  quickActionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  quickActionItem: {
+    flex: 1,
+    alignItems: 'center',
+    backgroundColor: colors.surfaceContainerLowest,
+    borderRadius: 14,
+    paddingVertical: 18,
+    paddingHorizontal: 8,
+  },
+  quickActionIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  quickActionLabel: {
+    fontFamily: fonts.interMedium,
+    fontSize: 12,
+    color: colors.onSurface,
+    textAlign: 'center',
+    lineHeight: 16,
+  },
+
 
   lineItem: {
     flexDirection: 'row',

@@ -3,37 +3,13 @@ import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
 import PropTypes from 'prop-types';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../context/ThemeContext';
-import { useAuth } from '../context/AuthContext';
 import { fonts } from '../theme/typography';
 
-export default function ScreenHeader({ title, showBack, onBack, showBell, onBell, hideLogo, showProfile, onProfile }) {
+export default function ScreenHeader({ title, showBack, onBack, showBell, onBell, hideLogo, rightElement }) {
   const { colors } = useTheme();
-  const { profile, role } = useAuth();
   const styles = getStyles(colors);
   const insets = useSafeAreaInsets();
-  const navigation = useNavigation();
-
-  const handleProfilePress = () => {
-    if (onProfile) {
-      onProfile();
-    } else {
-      navigation.navigate('EditProfile');
-    }
-  };
-
-  const getInitials = () => {
-    if (profile?.full_name) {
-      return profile.full_name
-        .split(' ')
-        .filter(Boolean)
-        .slice(0, 2)
-        .map(n => n[0].toUpperCase())
-        .join('');
-    }
-    return 'P';
-  };
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + 12 }]}>
@@ -45,21 +21,20 @@ export default function ScreenHeader({ title, showBack, onBack, showBell, onBell
         ) : hideLogo ? (
           <View style={{ width: 40 }} />
         ) : (
-          <Text style={styles.logo}>TENURA</Text>
+          <View style={styles.logoRow}>
+            <Image
+              source={require('../../assets/logo.png')}
+              style={styles.headerLogoIcon}
+              resizeMode="contain"
+            />
+            <Text style={styles.logo}>TENURA</Text>
+          </View>
         )}
       </View>
       {title ? <Text style={styles.title}>{title}</Text> : <View style={styles.spacer} />}
       <View style={styles.right}>
-        {showProfile && role === 'owner' ? (
-          <TouchableOpacity onPress={handleProfilePress} style={styles.profileBtn} activeOpacity={0.8}>
-            {profile?.avatar_url ? (
-              <Image source={{ uri: profile.avatar_url }} style={styles.avatarImage} />
-            ) : (
-              <View style={styles.avatarPlaceholder}>
-                <Text style={styles.avatarText}>{getInitials()}</Text>
-              </View>
-            )}
-          </TouchableOpacity>
+        {rightElement ? (
+          rightElement
         ) : showBell ? (
           <TouchableOpacity onPress={onBell} style={styles.bellBtn} activeOpacity={0.7}>
             <MaterialIcons name="notifications-none" size={22} color="#FFFFFF" />
@@ -79,8 +54,7 @@ ScreenHeader.propTypes = {
   showBell: PropTypes.bool,
   onBell: PropTypes.func,
   hideLogo: PropTypes.bool,
-  showProfile: PropTypes.bool,
-  onProfile: PropTypes.func,
+  rightElement: PropTypes.node,
 };
 
 ScreenHeader.defaultProps = {
@@ -90,8 +64,7 @@ ScreenHeader.defaultProps = {
   showBell: false,
   onBell: null,
   hideLogo: false,
-  showProfile: false,
-  onProfile: null,
+  rightElement: null,
 };
 
 const getStyles = (colors) => StyleSheet.create({
@@ -102,6 +75,11 @@ const getStyles = (colors) => StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingBottom: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.10,
+    shadowRadius: 4,
+    elevation: 4,
   },
   left: {
     flex: 1,
@@ -110,6 +88,15 @@ const getStyles = (colors) => StyleSheet.create({
   right: {
     flex: 1,
     alignItems: 'flex-end',
+  },
+  logoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  headerLogoIcon: {
+    width: 22,
+    height: 22,
   },
   logo: {
     fontFamily: fonts.manropeBold,
@@ -128,40 +115,19 @@ const getStyles = (colors) => StyleSheet.create({
     flex: 2,
   },
   backBtn: {
-    padding: 4,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   bellBtn: {
-    padding: 4,
-  },
-  profileBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: colors.primaryContainer,
-    borderWidth: 1.5,
-    borderColor: '#FFFFFF',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
-    // Glowing border shadow
-    shadowColor: '#FFFFFF',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 6,
-    elevation: 4,
-    overflow: 'hidden',
-  },
-  avatarImage: {
-    width: '100%',
-    height: '100%',
-  },
-  avatarPlaceholder: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarText: {
-    fontFamily: fonts.manropeBold,
-    fontSize: 12,
-    color: colors.onPrimaryContainer,
   },
 });

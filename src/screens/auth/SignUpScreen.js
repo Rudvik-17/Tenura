@@ -9,6 +9,7 @@ import {
   Platform,
   ScrollView,
   Alert,
+  Image,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -112,7 +113,14 @@ export default function SignUpScreen({ navigation }) {
       >
         {/* Hero */}
         <View style={[styles.hero, { paddingTop: insets.top + 32 }]}>
-          <Text style={styles.logoText}>TENURA</Text>
+          <View style={styles.brandRow}>
+            <Image
+              source={require('../../../assets/logo.png')}
+              style={styles.heroLogo}
+              resizeMode="contain"
+            />
+            <Text style={styles.logoText}>TENURA</Text>
+          </View>
           <Text style={styles.tagline}>Architectural Trust. Defined.</Text>
           <View style={styles.heroDivider} />
         </View>
@@ -246,12 +254,21 @@ const getStyles = (colors) => StyleSheet.create({
     position: 'relative',
     overflow: 'hidden',
   },
+  brandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 6,
+  },
+  heroLogo: {
+    width: 28,
+    height: 28,
+  },
   logoText: {
     fontFamily: fonts.manropeBold,
     fontSize: 22,
     letterSpacing: 4,
     color: '#FFFFFF',
-    marginBottom: 6,
   },
   tagline: {
     fontFamily: fonts.interRegular,

@@ -8,7 +8,6 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
-  Image,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -66,12 +65,11 @@ export default function OwnerDashboard({ navigation }) {
             .order('date', { ascending: false })
             .limit(10)
         : Promise.resolve({ data: [], error: null }),
-      // Bug 1 fix: query payments via tenants join — payments has no owner_id column
       supabase
         .from('payments')
-        .select('amount, paid_at, tenants!inner(owner_id)')
+        .select('amount, refunded_amount, status, paid_at, tenants!inner(owner_id)')
         .eq('tenants.owner_id', user.id)
-        .eq('status', 'paid'),
+        .in('status', ['paid', 'partially_refunded']),
       propertyIds.length > 0
         ? supabase
             .from('maintenance_requests')
@@ -92,11 +90,14 @@ export default function OwnerDashboard({ navigation }) {
     const totalUnits = props.reduce((s, p) => s + p.total_units, 0);
     const activeLeases = props.flatMap(p => p.leases).filter(l => l.status === 'active').length;
     const paidPayments = paymentsRes.data ?? [];
-    const totalCollected = paidPayments.reduce((s, p) => s + Number(p.amount), 0);
+    const totalCollected = paidPayments.reduce(
+      (s, p) => s + Math.max(0, Number(p.amount || 0) - Number(p.refunded_amount || 0)),
+      0
+    );
     const startOfMonthTime = new Date(startOfMonth).getTime();
     const mtdCollected = paidPayments
       .filter(p => p.paid_at && new Date(p.paid_at).getTime() >= startOfMonthTime)
-      .reduce((s, p) => s + Number(p.amount), 0);
+      .reduce((s, p) => s + Math.max(0, Number(p.amount || 0) - Number(p.refunded_amount || 0)), 0);
     const activeIssuesData = issuesRes.data ?? [];
     const activeIssues = activeIssuesData.length;
     const urgentIssues = activeIssuesData.filter(i => i.priority === 'high').length;
@@ -153,7 +154,7 @@ export default function OwnerDashboard({ navigation }) {
   if (properties.length === 0) {
     return (
       <View style={styles.container}>
-        <ScreenHeader showProfile={true} />
+        <ScreenHeader showBell />
         <ScrollView
           contentContainerStyle={styles.emptyScrollContent}
           showsVerticalScrollIndicator={false}
@@ -161,7 +162,7 @@ export default function OwnerDashboard({ navigation }) {
         >
           <View style={styles.emptyHero}>
             <View style={styles.emptyIconCircle}>
-              <MaterialIcons name="domain-add" size={48} color={colors.onPrimary} />
+              <MaterialIcons name="domain-add" size={48} color={colors.primary} />
             </View>
             <Text style={styles.emptyTitle}>No properties yet</Text>
             <Text style={styles.emptySubtitle}>
@@ -183,7 +184,7 @@ export default function OwnerDashboard({ navigation }) {
   // ── Dashboard with data ───────────────────────────────────────────────────────
   return (
     <View style={styles.container}>
-      <ScreenHeader showProfile={true} />
+      <ScreenHeader showBell />
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
@@ -192,7 +193,7 @@ export default function OwnerDashboard({ navigation }) {
       >
         {/* Hero summary */}
         <View style={styles.heroSection}>
-          <Text style={styles.heroLabel}>RENT COLLECTED</Text>
+          <Text style={styles.heroLabel}>Rent collected</Text>
           <Text style={styles.heroValue}>{formatCrore(metrics?.totalCollected ?? 0)}</Text>
           <Text style={styles.heroSubtitle}>
             {properties.length} {properties.length === 1 ? 'property' : 'properties'} · Managed portfolio
@@ -210,20 +211,7 @@ export default function OwnerDashboard({ navigation }) {
             <View style={styles.metricGap} />
             <TouchableOpacity
               style={{ flex: 1 }}
-              onPress={() => navigation.getParent()?.navigate('Finance')}
-              activeOpacity={0.8}
-            >
-              <MetricCard
-                icon="payments"
-                value={formatCrore(metrics?.mtdCollected ?? 0)}
-                label="Monthly Inputs"
-              />
-            </TouchableOpacity>
-          </View>
-          <View style={[styles.metricsRow, { marginTop: 12 }]}>
-            <TouchableOpacity
-              style={{ flex: 1 }}
-              onPress={() => navigation.navigate('Issues')}
+              onPress={() => navigation.navigate('Menu', { screen: 'ResidentIssues' })}
               activeOpacity={0.8}
             >
               <MetricCard
@@ -234,12 +222,6 @@ export default function OwnerDashboard({ navigation }) {
                 trendUp={false}
               />
             </TouchableOpacity>
-            <View style={styles.metricGap} />
-            <MetricCard
-              icon="event"
-              value={String(metrics?.expiringLeases ?? 0).padStart(2, '0')}
-              label="Expiring (30d)"
-            />
           </View>
         </View>
 
@@ -260,13 +242,9 @@ export default function OwnerDashboard({ navigation }) {
                 activeOpacity={0.8}
               >
                 <View style={styles.propertyCardInner}>
-                  {property.image_url ? (
-                    <Image source={{ uri: property.image_url }} style={styles.propertyThumbnail} />
-                  ) : (
-                    <View style={styles.propertyIconBg}>
-                      <MaterialIcons name="apartment" size={28} color={colors.onPrimary} />
-                    </View>
-                  )}
+                  <View style={styles.propertyIconBg}>
+                    <MaterialIcons name="apartment" size={28} color={colors.primary} />
+                  </View>
                   <View style={styles.propertyInfo}>
                     <Text style={styles.propertyName}>{property.name}</Text>
                     <View style={styles.propertyMeta}>
@@ -297,29 +275,32 @@ export default function OwnerDashboard({ navigation }) {
               <Text style={styles.emptyText}>No transactions yet</Text>
             </View>
           ) : (
-            transactions.map((tx) => (
-              <View key={tx.id} style={styles.txRow}>
-                <View style={styles.txIconBg}>
-                  <MaterialIcons
-                    name={tx.type === 'rent' ? 'arrow-downward' : 'arrow-upward'}
-                    size={16}
-                    color={tx.type === 'rent' ? colors.onTertiaryContainer : colors.error}
-                  />
-                </View>
-                <View style={styles.txInfo}>
-                  <Text style={styles.txDesc} numberOfLines={1}>{tx.description}</Text>
-                  <Text style={styles.txDate}>
-                    {new Date(tx.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+            transactions.map((tx) => {
+              const isInflow = tx.type === 'rent' && Number(tx.amount || 0) >= 0;
+              return (
+                <View key={tx.id} style={styles.txRow}>
+                  <View style={styles.txIconBg}>
+                    <MaterialIcons
+                      name={isInflow ? 'arrow-downward' : 'arrow-upward'}
+                      size={16}
+                      color={isInflow ? colors.onTertiaryContainer : colors.error}
+                    />
+                  </View>
+                  <View style={styles.txInfo}>
+                    <Text style={styles.txDesc} numberOfLines={1}>{tx.description}</Text>
+                    <Text style={styles.txDate}>
+                      {new Date(tx.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    </Text>
+                  </View>
+                  <Text style={[
+                    styles.txAmount,
+                    { color: isInflow ? colors.onTertiaryContainer : colors.error }
+                  ]}>
+                    {isInflow ? '+' : '-'}₹{Math.abs(Number(tx.amount || 0)).toLocaleString('en-IN')}
                   </Text>
                 </View>
-                <Text style={[
-                  styles.txAmount,
-                  { color: tx.type === 'rent' ? colors.onTertiaryContainer : colors.error }
-                ]}>
-                  {tx.type === 'rent' ? '+' : '-'}₹{Number(tx.amount).toLocaleString('en-IN')}
-                </Text>
-              </View>
-            ))
+              );
+            })
           )}
         </View>
       </ScrollView>
@@ -355,12 +336,11 @@ const getStyles = (colors) => StyleSheet.create({
   },
   heroLabel: {
     fontFamily: fonts.interSemiBold,
-    fontSize: 11,
-    letterSpacing: 1.5,
+    fontSize: 13,
+    letterSpacing: 0.2,
     color: colors.onPrimaryContainer,
-    opacity: 0.6,
-    textTransform: 'uppercase',
-    marginBottom: 8,
+    opacity: 0.7,
+    marginBottom: 6,
   },
   heroValue: {
     fontFamily: fonts.manropeBold,
@@ -369,10 +349,10 @@ const getStyles = (colors) => StyleSheet.create({
     marginBottom: 4,
   },
   heroSubtitle: {
-    fontFamily: fonts.interRegular,
+    fontFamily: fonts.interMedium,
     fontSize: 13,
     color: colors.onPrimaryContainer,
-    opacity: 0.7,
+    opacity: 0.9,
   },
 
   metricsGrid: {
@@ -405,12 +385,6 @@ const getStyles = (colors) => StyleSheet.create({
     backgroundColor: colors.primaryContainer,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  propertyThumbnail: {
-    width: 56,
-    height: 56,
-    borderRadius: 12,
-    resizeMode: 'cover',
   },
   propertyInfo: { flex: 1 },
   propertyName: {

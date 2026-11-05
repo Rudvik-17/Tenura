@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View } from 'react-native';
+import * as SplashScreen from 'expo-splash-screen';
 import { useFonts } from 'expo-font';
 import {
   Manrope_400Regular,
@@ -17,6 +18,9 @@ import { ThemeProvider } from './src/context/ThemeContext';
 import RootNavigator from './src/navigation/RootNavigator';
 import SplashAnimation from './src/components/SplashAnimation';
 import { requestPermissions } from './src/lib/notifications';
+
+// Prevent the native splash screen from auto-hiding before fonts and assets are ready
+SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export default function App() {
   const [fontsLoaded] = useFonts({
@@ -44,6 +48,12 @@ export default function App() {
   const handleSplashFinish = React.useCallback(() => {
     setSplashActive(false);
   }, []);
+
+  useEffect(() => {
+    if (fontsLoaded || fontTimeout) {
+      SplashScreen.hideAsync().catch(() => {});
+    }
+  }, [fontsLoaded, fontTimeout]);
 
   // Hold render until fonts are ready or 3s timeout has passed.
   if (!fontsLoaded && !fontTimeout) {

@@ -1,11 +1,50 @@
 const METHOD_LABELS = {
+  razorpay: 'Razorpay Secure Checkout',
+  upi_direct: 'Direct UPI (Owner Verified)',
+  upi: 'UPI',
   gpay: 'Google Pay',
   phonepe: 'PhonePe',
   paytm: 'Paytm',
+  bhim: 'BHIM / UPI App',
 };
 
-export function buildReceiptHTML({ txnId, amount, method, paidAt, tenantName, propertyName, unitNumber }) {
-  const formattedAmount = `₹${Number(amount).toLocaleString('en-IN')}`;
+export function buildReceiptHTML({
+  txnId,
+  amount,
+  method,
+  paidAt,
+  tenantName,
+  propertyName,
+  unitNumber,
+  paymentTitle,
+  departmentName,
+  departmentUpiId,
+  consumerNumber,
+  status = 'paid',
+  refundedAmount = 0,
+  verificationStatus = null,
+}) {
+  const isUtilityReceipt = Boolean(departmentName);
+  const isLegacy = verificationStatus === 'legacy_unverified';
+  if (
+    !status ||
+    (status !== 'paid' && status !== 'partially_refunded') ||
+    (!isUtilityReceipt &&
+      verificationStatus !== 'verified_provider' &&
+      verificationStatus !== 'verified_owner' &&
+      !isLegacy) ||
+    verificationStatus === 'unverified' ||
+    verificationStatus === 'conflict'
+  ) {
+    throw new Error('Cannot generate a paid receipt for an unsettled or unverified payment.');
+  }
+
+  const numericAmount = Number(amount || 0);
+  const numericRefunded = Number(refundedAmount || 0);
+  const netPaidAmount = Math.max(0, numericAmount - numericRefunded);
+  const formattedAmount = `₹${netPaidAmount.toLocaleString('en-IN')}`;
+  const formattedGrossAmount = `₹${numericAmount.toLocaleString('en-IN')}`;
+  const formattedRefundedAmount = `₹${numericRefunded.toLocaleString('en-IN')}`;
   const formattedDate = new Date(paidAt).toLocaleDateString('en-IN', {
     day: 'numeric', month: 'long', year: 'numeric',
   });
@@ -13,7 +52,39 @@ export function buildReceiptHTML({ txnId, amount, method, paidAt, tenantName, pr
     hour: '2-digit', minute: '2-digit', second: '2-digit',
   });
   const receiptNo = `RCPT-${txnId}`;
-  const methodLabel = METHOD_LABELS[method] ?? method;
+  const methodLabel = METHOD_LABELS[method] ?? method ?? 'Razorpay';
+  const bannerBg = isLegacy ? '#FEF3C7' : '#68dba9';
+  const bannerTextColor = isLegacy ? '#92400E' : '#002045';
+  const bannerDotColor = isLegacy ? '#B45309' : '#002045';
+  const bannerText = isLegacy
+    ? 'Historical Record · Settled Prior to Platform Verification'
+    : (numericRefunded > 0 ? 'Payment Confirmed (Partial Refund Issued)' : 'Payment Confirmed');
+  const refundRows = numericRefunded > 0
+    ? `
+        <tr>
+          <td class="detail-key">Original Paid Amount</td>
+          <td class="detail-value">${formattedGrossAmount}</td>
+        </tr>
+        <tr>
+          <td class="detail-key">Refunded Amount</td>
+          <td class="detail-value" style="color:#b45309;">- ${formattedRefundedAmount}</td>
+        </tr>
+      `
+    : '';
+  const utilityRows = departmentName
+    ? `
+        <tr>
+          <td class="detail-key">Bill Type</td>
+          <td class="detail-value highlight">${paymentTitle || 'Utility Bill'}</td>
+        </tr>
+        <tr>
+          <td class="detail-key">Department Paid</td>
+          <td class="detail-value">${departmentName}</td>
+        </tr>
+        ${departmentUpiId ? `<tr><td class="detail-key">Department UPI ID</td><td class="detail-value">${departmentUpiId}</td></tr>` : ''}
+        ${consumerNumber ? `<tr><td class="detail-key">Consumer / RR No.</td><td class="detail-value">${consumerNumber}</td></tr>` : ''}
+      `
+    : '';
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -149,16 +220,24 @@ export function buildReceiptHTML({ txnId, amount, method, paidAt, tenantName, pr
         <div class="receipt-no">${receiptNo}</div>
       </div>
     </div>
-    <div class="status-banner">
-      <span class="status-dot"></span>
-      <span class="status-text">Payment Confirmed</span>
+    <div class="status-banner" style="background: ${bannerBg};">
+      <span class="status-dot" style="background: ${bannerDotColor};"></span>
+      <span class="status-text" style="color: ${bannerTextColor};">${bannerText}</span>
     </div>
     <div class="body">
       <div class="amount-section">
-        <div class="amount-label">Amount Paid</div>
+        <div class="amount-label">${numericRefunded > 0 ? 'Net Amount Paid' : 'Amount Paid'}</div>
         <div class="amount-value">${formattedAmount}</div>
       </div>
       <table class="details-table">
+        ${isLegacy ? `
+        <tr>
+          <td class="detail-key">Settlement Type</td>
+          <td class="detail-value" style="color:#B45309; font-weight:700;">Historical Import / Record</td>
+        </tr>
+        ` : ''}
+        ${utilityRows}
+        ${refundRows}
         <tr>
           <td class="detail-key">Tenant</td>
           <td class="detail-value">${tenantName}</td>
@@ -173,7 +252,7 @@ export function buildReceiptHTML({ txnId, amount, method, paidAt, tenantName, pr
         </tr>
         <tr>
           <td class="detail-key">Payment Method</td>
-          <td class="detail-value">UPI · ${methodLabel}</td>
+          <td class="detail-value">${methodLabel}</td>
         </tr>
         <tr>
           <td class="detail-key">Date</td>
@@ -189,14 +268,14 @@ export function buildReceiptHTML({ txnId, amount, method, paidAt, tenantName, pr
         </tr>
         <tr>
           <td class="detail-key">Status</td>
-          <td class="detail-value" style="color:#1a8a5a; font-weight:700;">&#10003; Paid</td>
+          <td class="detail-value" style="color:#1a8a5a; font-weight:700;">&#10003; ${numericRefunded > 0 ? 'Paid (Partially Refunded)' : 'Paid'}</td>
         </tr>
       </table>
     </div>
     <div class="footer">
       <div class="footer-line">This is a computer-generated receipt and does not require a physical signature.</div>
       <div class="footer-line">For queries, contact your property manager via the Tenura app.</div>
-      <div class="footer-brand">TENURA &nbsp;·&nbsp; Secure Property Management</div>
+      <div class="footer-brand">Tenura &nbsp;·&nbsp; Secure Property Management</div>
     </div>
   </div>
 </body>

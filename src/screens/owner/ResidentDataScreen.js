@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
+  Platform,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -73,9 +74,6 @@ export default function ResidentDataScreen({ navigation }) {
 
   if (!user) return null;
 
-  const active = tenants.filter(t => t.status === 'active').length;
-  const pending = tenants.filter(t => t.status === 'pending').length;
-
   const chipVariant = (status) =>
     status === 'active' ? 'active' : status === 'pending' ? 'pending' : 'urgent';
 
@@ -94,7 +92,10 @@ export default function ResidentDataScreen({ navigation }) {
           Unit {item.unit_number} · {item.properties?.name}
         </Text>
         {item.email ? (
-          <Text style={styles.tenantEmail} numberOfLines={1}>{item.email}</Text>
+          <View style={styles.emailRow}>
+            <MaterialIcons name="mail-outline" size={13} color={colors.onSurfaceVariant} style={{ marginRight: 4 }} />
+            <Text style={styles.tenantEmail} numberOfLines={1}>{item.email}</Text>
+          </View>
         ) : null}
       </View>
       <View style={styles.tenantRight}>
@@ -102,7 +103,7 @@ export default function ResidentDataScreen({ navigation }) {
           label={item.status}
           variant={chipVariant(item.status)}
         />
-        <MaterialIcons name="chevron-right" size={16} color={colors.outline} style={{ marginTop: 4 }} />
+        <MaterialIcons name="chevron-right" size={18} color={colors.outline} style={{ marginTop: 6 }} />
       </View>
     </TouchableOpacity>
   );
@@ -130,7 +131,7 @@ export default function ResidentDataScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      <ScreenHeader title="Residents" showProfile={true} />
+      <ScreenHeader title="Residents" showBell />
 
       <FlatList
         data={filtered}
@@ -145,21 +146,24 @@ export default function ResidentDataScreen({ navigation }) {
             {/* Metrics */}
             <View style={styles.metricsRow}>
               <MetricCard icon="groups" value={String(tenants.length)} label="Total Residents" />
-              <View style={{ width: 12 }} />
-              <MetricCard icon="check-circle" value={String(active)} label="Active" trend={`${pending} pending`} trendUp={pending === 0} />
             </View>
 
             {/* Search + Add */}
             <View style={styles.searchRow}>
               <View style={styles.searchBox}>
-                <MaterialIcons name="search" size={18} color={colors.outline} style={{ marginRight: 8 }} />
+                <MaterialIcons name="search" size={20} color={colors.primary} style={{ marginRight: 8 }} />
                 <TextInput
                   style={styles.searchInput}
                   value={query}
                   onChangeText={setQuery}
-                  placeholder="Search residents..."
-                  placeholderTextColor={colors.outline}
+                  placeholder="Search (e.g. Arjun, Unit 102, or email)..."
+                  placeholderTextColor={colors.onSurfaceVariant}
                 />
+                {query.length > 0 && (
+                  <TouchableOpacity onPress={() => setQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <MaterialIcons name="close" size={18} color={colors.onSurfaceVariant} />
+                  </TouchableOpacity>
+                )}
               </View>
               <RateLimitedIconButton
                 style={styles.addBtn}
@@ -168,11 +172,13 @@ export default function ResidentDataScreen({ navigation }) {
               />
             </View>
 
-            <SectionHeader
-              title="All Residents"
-              actionLabel="Add Resident"
-              onAction={() => navigation.navigate('TenantOnboarding')}
-            />
+            <View style={styles.sectionHeaderWrapper}>
+              <SectionHeader
+                title="All Residents"
+                actionLabel="Add Resident"
+                onAction={() => navigation.navigate('TenantOnboarding')}
+              />
+            </View>
           </>
         }
         ListEmptyComponent={
@@ -221,10 +227,17 @@ const getStyles = (colors) => StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.surfaceContainerHighest,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    backgroundColor: colors.surfaceContainerLowest,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: colors.outlineVariant,
+    paddingHorizontal: 14,
+    paddingVertical: Platform.OS === 'ios' ? 10 : 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 3,
+    elevation: 1,
   },
   searchInput: {
     flex: 1,
@@ -235,10 +248,20 @@ const getStyles = (colors) => StyleSheet.create({
   addBtn: {
     width: 44,
     height: 44,
-    borderRadius: 8,
+    borderRadius: 12,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+
+  sectionHeaderWrapper: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
   },
 
   tenantRow: {
@@ -246,10 +269,17 @@ const getStyles = (colors) => StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.surfaceContainerLowest,
     marginHorizontal: 16,
-    marginBottom: 8,
-    borderRadius: 12,
+    marginBottom: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.outlineVariant,
     padding: 14,
     gap: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
   },
   avatarCircle: {
     width: 44,
@@ -262,7 +292,7 @@ const getStyles = (colors) => StyleSheet.create({
   avatarInitial: {
     fontFamily: fonts.manropeBold,
     fontSize: 18,
-    color: colors.onPrimaryContainer,
+    color: colors.primary,
   },
   tenantInfo: { flex: 1 },
   tenantName: {
@@ -272,15 +302,20 @@ const getStyles = (colors) => StyleSheet.create({
     marginBottom: 2,
   },
   tenantMeta: {
-    fontFamily: fonts.interRegular,
-    fontSize: 12,
+    fontFamily: fonts.interMedium,
+    fontSize: 13,
     color: colors.onSurfaceVariant,
     marginBottom: 2,
   },
+  emailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 2,
+  },
   tenantEmail: {
-    fontFamily: fonts.interRegular,
-    fontSize: 11,
-    color: colors.outline,
+    fontFamily: fonts.interMedium,
+    fontSize: 12.5,
+    color: colors.onSurfaceVariant,
   },
   tenantRight: { alignItems: 'flex-end' },
 

@@ -88,14 +88,22 @@ export default function IssueMessagesScreen({ navigation, route }) {
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'issue_messages', filter: `issue_id=eq.${issueId}` },
         (payload) => {
-          setMessages(prev => {
-            // avoid duplicates when our own optimistic insert arrives
-            if (prev.some(m => m.id === payload.new.id)) return prev;
-            return [payload.new, ...prev];
-          });
+          if (payload?.new) {
+            setMessages(prev => {
+              // avoid duplicates when our own optimistic insert arrives
+              if (prev.some(m => m.id === payload.new.id)) return prev;
+              return [payload.new, ...prev];
+            });
+          }
         },
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log(`Realtime connected for issue: ${issueId}`);
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          console.warn(`Realtime status for issue ${issueId}:`, status);
+        }
+      });
 
     return () => { supabase.removeChannel(channel); };
   }, [issueId]);

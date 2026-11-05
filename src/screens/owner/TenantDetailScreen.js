@@ -21,6 +21,7 @@ import ScreenHeader from '../../components/ScreenHeader';
 import StatusChip from '../../components/StatusChip';
 import PrimaryButton from '../../components/PrimaryButton';
 import { RateLimitedButton } from '../../components/RateLimitedButton';
+import { getTenantDeposit, saveTenantDeposit, removeTenantDeposit, toAsciiDigits } from '../../lib/securityDeposit';
 
 export default function TenantDetailScreen({ navigation, route }) {
   const { colors } = useTheme();
@@ -38,6 +39,8 @@ export default function TenantDetailScreen({ navigation, route }) {
   const [unitEdit, setUnitEdit] = useState('');
   const [phoneEdit, setPhoneEdit] = useState('');
   const [rentEdit, setRentEdit] = useState('');
+  const [deposit, setDeposit] = useState(null);
+  const [depositEdit, setDepositEdit] = useState('');
   const [editErrors, setEditErrors] = useState({});
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(null);
@@ -59,9 +62,24 @@ export default function TenantDetailScreen({ navigation, route }) {
       setLoadingLease(false);
       return;
     }
-    setLease(data?.[0] ?? null);
+    const l = data?.[0] ?? null;
+    setLease(l);
+
+    // Fetch tenant security deposit
+    try {
+      const depInfo = await getTenantDeposit(
+        tenant.id,
+        tenant.full_name,
+        l?.monthly_rent ?? 0,
+        tenant.security_deposit
+      );
+      setDeposit(depInfo);
+    } catch (dErr) {
+      console.warn('Error fetching deposit:', dErr);
+    }
+
     setLoadingLease(false);
-  }, [tenant.id]);
+  }, [tenant.id, tenant.full_name, tenant.security_deposit]);
 
   // Fetch on mount — inline effect via useState initializer pattern not available,
   // so we use a ref-based one-time call
@@ -75,6 +93,7 @@ export default function TenantDetailScreen({ navigation, route }) {
     setUnitEdit(tenant.unit_number ?? '');
     setPhoneEdit(tenant.phone ?? '');
     setRentEdit(lease ? String(lease.monthly_rent) : '');
+    setDepositEdit(deposit ? String(deposit.amount) : '');
     setEditErrors({});
     setSaveError(null);
     setEditMode(true);
@@ -86,6 +105,10 @@ export default function TenantDetailScreen({ navigation, route }) {
     const rent = Number(rentEdit);
     if (!rentEdit.trim()) errs.rent = 'Monthly rent is required.';
     else if (isNaN(rent) || rent <= 0) errs.rent = 'Enter a valid rent amount.';
+    if (depositEdit.trim()) {
+      const d = Number(depositEdit);
+      if (isNaN(d) || d < 0) errs.deposit = 'Enter a valid deposit amount.';
+    }
     setEditErrors(errs);
     return Object.keys(errs).length === 0;
   };
@@ -119,6 +142,21 @@ export default function TenantDetailScreen({ navigation, route }) {
       );
     }
 
+    // Save custom deposit price if provided
+    if (depositEdit.trim()) {
+      try {
+        await saveTenantDeposit(tenant.id, tenant.full_name, {
+          amount: Number(depositEdit),
+          status: deposit?.status || 'collected',
+          deductions: deposit?.deductions || [],
+          notes: deposit?.notes || '',
+        });
+        setDeposit(prev => ({ ...prev, amount: Number(depositEdit) }));
+      } catch (depErr) {
+        console.warn('Error updating deposit:', depErr);
+      }
+    }
+
     const results = await Promise.all(updates);
     setSaving(false);
 
@@ -142,8 +180,8 @@ export default function TenantDetailScreen({ navigation, route }) {
 
   const handleRemove = () => {
     Alert.alert(
-      'Remove Tenant',
-      `Are you sure you want to remove ${tenant.full_name}? Their lease will be marked as expired.`,
+      'Remove Resident',
+      `Are you sure you want to remove ${tenant.full_name}? Financial and payment ledger records will be preserved for audit compliance.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -157,29 +195,71 @@ export default function TenantDetailScreen({ navigation, route }) {
 
   const confirmRemove = async () => {
     setRemoving(true);
-    const ops = [
-      supabase
-        .from('tenants')
-        .update({ status: 'exiting' })
-        .eq('id', tenant.id)
-        .eq('owner_id', user.id),
-    ];
-    if (lease) {
-      ops.push(
-        supabase
+    try {
+      // 1. Delete maintenance requests and any child issue messages
+      const { data: issues } = await supabase
+        .from('maintenance_requests')
+        .select('id')
+        .eq('tenant_id', tenant.id);
+
+      if (issues && issues.length > 0) {
+        const issueIds = issues.map(i => i.id);
+        await supabase.from('issue_messages').delete().in('issue_id', issueIds);
+        await supabase.from('maintenance_requests').delete().in('id', issueIds);
+      }
+
+      // 2. Check if this tenant has any payment records (financial history must never be deleted)
+      const { data: existingPayments, error: payCheckErr } = await supabase
+        .from('payments')
+        .select('id')
+        .eq('tenant_id', tenant.id)
+        .limit(1);
+
+      if (payCheckErr) {
+        throw payCheckErr;
+      }
+
+      if (existingPayments && existingPayments.length > 0) {
+        // Preserve financial history: terminate active leases and mark resident as exiting
+        await supabase
           .from('leases')
-          .update({ status: 'expired' })
-          .eq('id', lease.id),
-      );
+          .update({ status: 'terminated' })
+          .eq('tenant_id', tenant.id)
+          .eq('status', 'active');
+
+        const { error: archiveErr } = await supabase
+          .from('tenants')
+          .update({ status: 'exiting', user_id: null })
+          .eq('id', tenant.id)
+          .eq('owner_id', user.id);
+
+        if (archiveErr) {
+          throw archiveErr;
+        }
+      } else {
+        // No financial history exists — safe to remove draft leases and tenant record
+        await supabase.from('leases').delete().eq('tenant_id', tenant.id);
+
+        const { error: delError } = await supabase
+          .from('tenants')
+          .delete()
+          .eq('id', tenant.id);
+
+        if (delError) {
+          throw delError;
+        }
+      }
+
+      // Clean up cached deposit record
+      await removeTenantDeposit(tenant.id, tenant.full_name);
+
+      setRemoving(false);
+      navigation.goBack();
+    } catch (err) {
+      setRemoving(false);
+      console.error('Error removing resident:', err);
+      Alert.alert('Error', err.message || 'Could not remove resident.');
     }
-    const results = await Promise.all(ops);
-    setRemoving(false);
-    const failed = results.find(r => r.error);
-    if (failed) {
-      Alert.alert('Error', failed.error.message);
-      return;
-    }
-    navigation.goBack();
   };
 
   const chipVariant = status =>
@@ -255,11 +335,34 @@ export default function TenantDetailScreen({ navigation, route }) {
                   accent
                 />
                 <DetailRow
+                  icon="shield"
+                  label="Security Deposit"
+                  value={deposit?.amount ? `₹${Number(deposit.amount).toLocaleString('en-IN')}` : 'Not set'}
+                />
+                <DetailRow
                   icon="description"
                   label="Lease Status"
                   value={lease.status.replace('_', ' ')}
                   last
                 />
+                <TouchableOpacity
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6,
+                    backgroundColor: `${colors.primary}12`,
+                    borderRadius: 8,
+                    paddingVertical: 10,
+                    marginTop: 12,
+                  }}
+                  onPress={() => navigation.navigate('Finance', { screen: 'SecurityDeposit' })}
+                >
+                  <MaterialIcons name="tune" size={16} color={colors.primary} />
+                  <Text style={{ fontFamily: fonts.interSemiBold, fontSize: 13, color: colors.primary }}>
+                    Manage Security Deposit & Deductions
+                  </Text>
+                </TouchableOpacity>
               </>
             ) : (
               <Text style={styles.noLeaseText}>No active lease found.</Text>
@@ -303,13 +406,29 @@ export default function TenantDetailScreen({ navigation, route }) {
                     <TextInput
                       style={[styles.input, styles.prefixInput, editErrors.rent && styles.inputError]}
                       value={rentEdit}
-                      onChangeText={t => { setRentEdit(t); setEditErrors(e => ({ ...e, rent: null })); }}
+                      onChangeText={t => { setRentEdit(toAsciiDigits(t).replace(/[^0-9]/g, '')); setEditErrors(e => ({ ...e, rent: null })); }}
                       placeholder="e.g. 45000"
                       placeholderTextColor={colors.outline}
-                      keyboardType="number-pad"
+                      keyboardType={Platform.OS === 'ios' ? 'ascii-capable-number-pad' : 'number-pad'}
                     />
                   </View>
                   {editErrors.rent ? <Text style={styles.fieldError}>{editErrors.rent}</Text> : null}
+
+                  <Text style={[styles.fieldLabel, { marginTop: 16 }]}>SECURITY DEPOSIT (OWNER SET)</Text>
+                  <View style={styles.prefixRow}>
+                    <View style={styles.prefixBox}>
+                      <Text style={styles.prefixText}>₹</Text>
+                    </View>
+                    <TextInput
+                      style={[styles.input, styles.prefixInput, editErrors.deposit && styles.inputError]}
+                      value={depositEdit}
+                      onChangeText={t => { setDepositEdit(toAsciiDigits(t).replace(/[^0-9]/g, '')); setEditErrors(e => ({ ...e, deposit: null })); }}
+                      placeholder="e.g. 50000"
+                      placeholderTextColor={colors.outline}
+                      keyboardType={Platform.OS === 'ios' ? 'ascii-capable-number-pad' : 'number-pad'}
+                    />
+                  </View>
+                  {editErrors.deposit ? <Text style={styles.fieldError}>{editErrors.deposit}</Text> : null}
                 </>
               ) : null}
 
@@ -412,7 +531,6 @@ const getStyles = (colors) => StyleSheet.create({
     fontFamily: fonts.interRegular,
     fontSize: 13,
     color: colors.onPrimaryContainer,
-    opacity: 0.7,
     marginBottom: 12,
   },
   heroChipRow: {

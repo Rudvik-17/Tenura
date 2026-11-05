@@ -5,6 +5,7 @@ import {
   ScrollView,
   StyleSheet,
   TouchableOpacity,
+  Image,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -64,7 +65,12 @@ export default function RoleSelectionScreen() {
 
     const { error: upsertError } = await supabase
       .from('users')
-      .upsert({ id: user.id, role: roleKey }, { onConflict: 'id' });
+      .upsert({
+        id: user.id,
+        role: roleKey,
+        email: user.email || '',
+        full_name: user.user_metadata?.full_name || '',
+      }, { onConflict: 'id' });
 
     if (upsertError) {
       setLoading(null);
@@ -102,7 +108,14 @@ export default function RoleSelectionScreen() {
     <View style={[styles.container, { paddingBottom: insets.bottom }]}>
       {/* Dark header */}
       <View style={[styles.header, { paddingTop: insets.top + 24 }]}>
-        <Text style={styles.logoText}>TENURA</Text>
+        <View style={styles.brandRow}>
+          <Image
+            source={require('../../../assets/logo.png')}
+            style={styles.headerLogo}
+            resizeMode="contain"
+          />
+          <Text style={styles.logoText}>TENURA</Text>
+        </View>
         <Text style={styles.headerTitle}>Choose your journey.</Text>
         <Text style={styles.headerSubtitle}>
           Select your primary perspective to personalise your dashboard.
@@ -172,12 +185,21 @@ const getStyles = (colors) => StyleSheet.create({
     borderBottomLeftRadius: 28,
     borderBottomRightRadius: 28,
   },
+  brandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 16,
+  },
+  headerLogo: {
+    width: 20,
+    height: 20,
+  },
   logoText: {
     fontFamily: fonts.manropeBold,
     fontSize: 12,
     letterSpacing: 3,
-    color: 'rgba(255,255,255,0.5)',
-    marginBottom: 16,
+    color: 'rgba(255,255,255,0.75)',
   },
   headerTitle: {
     fontFamily: fonts.manropeBold,

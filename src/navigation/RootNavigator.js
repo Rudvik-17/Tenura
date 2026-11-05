@@ -10,7 +10,6 @@ import SignUpScreen from '../screens/auth/SignUpScreen';
 import RoleSelectionScreen from '../screens/auth/RoleSelectionScreen';
 import OwnerNavigator from './OwnerNavigator';
 import TenantNavigator from './TenantNavigator';
-import EditProfileScreen from '../screens/owner/EditProfileScreen';
 
 const Stack = createStackNavigator();
 
@@ -39,10 +38,7 @@ export default function RootNavigator() {
           // Logged in but no role set yet — always show role picker
           <Stack.Screen name="RoleSelection" component={RoleSelectionScreen} />
         ) : role === 'owner' ? (
-          <>
-            <Stack.Screen name="OwnerApp" component={OwnerNavigator} />
-            <Stack.Screen name="EditProfile" component={EditProfileScreen} />
-          </>
+          <Stack.Screen name="OwnerApp" component={OwnerNavigator} />
         ) : (
           <Stack.Screen name="TenantApp" component={TenantNavigator} />
         )}

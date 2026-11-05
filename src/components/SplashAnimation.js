@@ -6,17 +6,22 @@ import {
   Animated,
   Dimensions,
   StatusBar,
+  Image,
 } from 'react-native';
 import { fonts } from '../theme/typography';
+import { useTheme } from '../context/ThemeContext';
 
 const { width, height } = Dimensions.get('window');
+const CIRCLE_SIZE = Math.min(width * 0.65, 255);
 
 export default function SplashAnimation({ onFinish }) {
+  const { colors, isDark } = useTheme();
+  const styles = getStyles(colors, isDark);
   // Animated values
-  const glowScale = useRef(new Animated.Value(0.2)).current;
+  const glowScale = useRef(new Animated.Value(0.5)).current;
   const glowOpacity = useRef(new Animated.Value(0)).current;
-  const logoScale = useRef(new Animated.Value(0)).current;
-  const logoRotate = useRef(new Animated.Value(0)).current;
+  const logoScale = useRef(new Animated.Value(0.4)).current;
+  const logoOpacity = useRef(new Animated.Value(0)).current;
   const textOpacity = useRef(new Animated.Value(0)).current;
   const textTranslateY = useRef(new Animated.Value(20)).current;
   const splashOpacity = useRef(new Animated.Value(1)).current;
@@ -33,27 +38,28 @@ export default function SplashAnimation({ onFinish }) {
       // 1. Initial fade-in of background glow
       Animated.parallel([
         Animated.timing(glowOpacity, {
-          toValue: 0.6,
+          toValue: 1,
           duration: 600,
           useNativeDriver: true,
         }),
-        Animated.timing(glowScale, {
-          toValue: 1.5,
-          duration: 1200,
+        Animated.spring(glowScale, {
+          toValue: 1,
+          friction: 7,
+          tension: 40,
           useNativeDriver: true,
         }),
       ]),
-      // 2. Spring-scale and rotate the logo
+      // 2. Spring-scale and fade in the real brand logo
       Animated.parallel([
         Animated.spring(logoScale, {
           toValue: 1,
           friction: 6,
-          tension: 40,
+          tension: 45,
           useNativeDriver: true,
         }),
-        Animated.timing(logoRotate, {
+        Animated.timing(logoOpacity, {
           toValue: 1,
-          duration: 800,
+          duration: 600,
           useNativeDriver: true,
         }),
       ]),
@@ -84,17 +90,14 @@ export default function SplashAnimation({ onFinish }) {
     });
   }, []);
 
-  // Interpolate rotation
-  const spin = logoRotate.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
-  });
-
   return (
     <Animated.View style={[styles.container, { opacity: splashOpacity }]}>
-      <StatusBar barStyle="light-content" backgroundColor="#0C0B14" />
+      <StatusBar
+        barStyle={isDark ? 'light-content' : 'dark-content'}
+        backgroundColor={colors.surface}
+      />
 
-      {/* Ambient background glow */}
+      {/* Ambient background glow matching UI primary precision indigo */}
       <Animated.View
         style={[
           styles.glow,
@@ -111,15 +114,16 @@ export default function SplashAnimation({ onFinish }) {
           style={[
             styles.logoContainer,
             {
-              transform: [{ scale: logoScale }, { rotate: spin }],
+              opacity: logoOpacity,
+              transform: [{ scale: logoScale }],
             },
           ]}
         >
-          {/* Overlapping premium geometric lines representation of "E" and "L" (EstateLogic) */}
-          <View style={styles.outerRing}>
-            <View style={styles.innerRing} />
-            <View style={styles.diagonalAccent} />
-          </View>
+          <Image
+            source={require('../../assets/logo.png')}
+            style={styles.logoImage}
+            resizeMode="contain"
+          />
         </Animated.View>
 
         {/* Brand Text */}
@@ -133,21 +137,21 @@ export default function SplashAnimation({ onFinish }) {
           ]}
         >
           <Text style={styles.titleText}>TENURA</Text>
-          <Text style={styles.subtitleText}>PREMIUM LIVING SOLUTIONS</Text>
+          <Text style={styles.subtitleText}>ARCHITECTURAL TRUST. DEFINED.</Text>
         </Animated.View>
       </View>
     </Animated.View>
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors, isDark) => StyleSheet.create({
   container: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: '#0C0B14', // Sleek dark mode background
+    backgroundColor: colors.surface,
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 99999,
@@ -155,56 +159,30 @@ const styles = StyleSheet.create({
   },
   glow: {
     position: 'absolute',
-    width: 250,
-    height: 250,
-    borderRadius: 125,
-    backgroundColor: 'rgba(0, 229, 255, 0.25)', // Neon Cyan glow base
-    shadowColor: '#D84CFF', // Neon magenta secondary glow
+    width: CIRCLE_SIZE,
+    height: CIRCLE_SIZE,
+    borderRadius: CIRCLE_SIZE / 2,
+    backgroundColor: isDark ? 'rgba(168, 85, 247, 0.20)' : 'rgba(168, 85, 247, 0.14)',
+    shadowColor: '#A855F7',
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 100,
-    elevation: 10,
+    shadowOpacity: isDark ? 0.45 : 0.20,
+    shadowRadius: isDark ? 32 : 24,
+    elevation: 4,
   },
   logoWrapper: {
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 24,
+    gap: 20,
   },
   logoContainer: {
-    width: 100,
-    height: 100,
+    width: 120,
+    height: 120,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  outerRing: {
-    width: 90,
-    height: 90,
-    borderRadius: 45,
-    borderWidth: 5,
-    borderColor: '#00E5FF', // Neon cyan border
-    borderTopColor: '#D84CFF', // Neon magenta accent
-    borderRightColor: '#D84CFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    position: 'relative',
-  },
-  innerRing: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    borderWidth: 4,
-    borderColor: '#F5F3F7', // Ice-white
-    borderBottomColor: 'transparent',
-  },
-  diagonalAccent: {
-    position: 'absolute',
-    width: 5,
-    height: 40,
-    backgroundColor: '#00FF9D', // Glowing neon green
-    transform: [{ rotate: '45deg' }],
-    bottom: 12,
-    right: 22,
-    borderRadius: 3,
+  logoImage: {
+    width: 114,
+    height: 114,
   },
   textContainer: {
     alignItems: 'center',
@@ -212,16 +190,16 @@ const styles = StyleSheet.create({
   },
   titleText: {
     fontFamily: fonts.manropeBold || 'System',
-    fontSize: 32,
+    fontSize: 28,
     fontWeight: '800',
-    color: '#F5F3F7',
-    letterSpacing: 1.5,
+    color: colors.onSurface,
+    letterSpacing: 3,
   },
   subtitleText: {
     fontFamily: fonts.interMedium || 'System',
     fontSize: 10,
     fontWeight: '600',
-    color: '#8E8A9F',
+    color: colors.tertiary,
     letterSpacing: 4,
   },
 });

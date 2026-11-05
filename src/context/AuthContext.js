@@ -6,7 +6,6 @@ const AuthContext = createContext({});
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [role, setRole] = useState(null);
-  const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -16,7 +15,7 @@ export const AuthProvider = ({ children }) => {
         setUser(session.user);
         const handleInitialSession = async () => {
           await linkTenantIfNeeded(session.user);
-          await fetchProfile(session.user.id);
+          await fetchRole(session.user.id);
         };
         handleInitialSession();
       } else {
@@ -34,14 +33,13 @@ export const AuthProvider = ({ children }) => {
           if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
             await linkTenantIfNeeded(session.user);
           }
-          await fetchProfile(session.user.id);
+          await fetchRole(session.user.id);
         };
         
         handleAuthSession();
       } else {
         setUser(null);
         setRole(null);
-        setProfile(null);
         setLoading(false);
       }
     });
@@ -54,66 +52,76 @@ export const AuthProvider = ({ children }) => {
   // account gets connected to the row the owner pre-created.
   const linkTenantIfNeeded = async (authUser) => {
     if (!authUser?.email) return;
-    const { data } = await supabase
-      .from('tenants')
-      .select('id')
-      .eq('email', authUser.email)
-      .is('user_id', null)
-      .limit(1);
-    if (data?.[0]) {
-      // 1. Link tenant row to user
-      await supabase
-        .from('tenants')
-        .update({ user_id: authUser.id, status: 'active' })
-        .eq('id', data[0].id);
-
-      // 2. Auto-set role to 'tenant' in users table
-      await supabase
-        .from('users')
-        .upsert({
-          id: authUser.id,
-          role: 'tenant',
-          full_name: authUser.user_metadata?.full_name || '',
-          email: authUser.email || ''
-        }, { onConflict: 'id' });
-    }
-  };
-
-  const fetchProfile = async (userId) => {
-    setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('role, full_name, avatar_url, age, gender, phone, email')
-        .eq('id', userId)
-        .single();
-      if (error) throw error;
-      setRole(data?.role ?? null);
-      setProfile(data ?? null);
+      const normalizedEmail = authUser.email.trim().toLowerCase();
+      const { data, error: fetchErr } = await supabase
+        .from('tenants')
+        .select('id')
+        .ilike('email', normalizedEmail)
+        .is('user_id', null)
+        .limit(1);
+
+      if (fetchErr) {
+        console.warn('Error checking unlinked tenant:', fetchErr.message);
+        return;
+      }
+
+      if (data?.[0]) {
+        // 1. Ensure user profile exists in public.users FIRST (satisfies FK constraint tenants_user_id_fkey)
+        const { error: userUpsertErr } = await supabase
+          .from('users')
+          .upsert({
+            id: authUser.id,
+            role: 'tenant',
+            full_name: authUser.user_metadata?.full_name || '',
+            email: authUser.email || ''
+          }, { onConflict: 'id' });
+
+        if (userUpsertErr) {
+          console.warn('Could not upsert user role before tenant link:', userUpsertErr.message);
+        }
+
+        // 2. Link tenant row to user
+        const { error: linkErr } = await supabase
+          .from('tenants')
+          .update({ user_id: authUser.id, status: 'active' })
+          .eq('id', data[0].id);
+
+        if (linkErr) {
+          console.warn('Could not link tenant account:', linkErr.message);
+        } else {
+          console.log(`Successfully linked tenant ${data[0].id} to user ${authUser.id}`);
+        }
+      }
     } catch (err) {
-      console.error('Error fetching profile:', err.message);
-      setRole(null);
-      setProfile(null);
-    } finally {
-      setLoading(false);
+      console.warn('linkTenantIfNeeded exception:', err.message);
     }
   };
 
-  // Exposed so screens can force a role/profile re-fetch after updating the users table
-  const refetchProfile = async () => {
+  const fetchRole = async (userId) => {
+    setLoading(true);
+    const { data } = await supabase
+      .from('users')
+      .select('role')
+      .eq('id', userId)
+      .single();
+    setRole(data?.role ?? null);
+    setLoading(false);
+  };
+
+  // Exposed so screens can force a role re-fetch after updating the users table
+  // without relying on an auth state change event firing.
+  const refetchRole = async () => {
     const { data: { user: currentUser } } = await supabase.auth.getUser();
-    if (currentUser) await fetchProfile(currentUser.id);
+    if (currentUser) await fetchRole(currentUser.id);
   };
 
   // Sets role to null in memory so RootNavigator shows RoleSelectionScreen.
   // Does not touch the database — RoleSelectionScreen will upsert the new choice.
-  const clearRole = () => {
-    setRole(null);
-    setProfile(null);
-  };
+  const clearRole = () => setRole(null);
 
   return (
-    <AuthContext.Provider value={{ user, role, profile, loading, refetchRole: refetchProfile, refetchProfile, clearRole }}>
+    <AuthContext.Provider value={{ user, role, loading, refetchRole, clearRole }}>
       {children}
     </AuthContext.Provider>
   );

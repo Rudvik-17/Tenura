@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   Alert,
+  Platform,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -17,12 +18,13 @@ import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system/legacy';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
-import { colors } from '../../theme/colors';
+import { useTheme } from '../../context/ThemeContext';
 import { fonts } from '../../theme/typography';
 import ScreenHeader from '../../components/ScreenHeader';
 import StatusChip from '../../components/StatusChip';
 import { RateLimitedButton } from '../../components/RateLimitedButton';
 import { buildLeaseAgreementHTML } from '../../lib/leaseAgreementHTML';
+import { getTenantDeposit } from '../../lib/securityDeposit';
 
 // DocuSign status → display config
 const DOCUSIGN_STATUS_CONFIG = {
@@ -35,6 +37,8 @@ const DOCUSIGN_STATUS_CONFIG = {
 };
 
 export default function LeaseDocumentsScreen({ navigation }) {
+  const { colors } = useTheme();
+  const styles = getStyles(colors);
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
 
@@ -125,34 +129,28 @@ export default function LeaseDocumentsScreen({ navigation }) {
     if (!lease) return;
     setGeneratingPdfId(lease.id);
     try {
+      const property = lease.properties;
       const tenant = lease.tenants;
-      let uri;
+      const depInfo = await getTenantDeposit(
+        tenant?.id,
+        tenant?.full_name,
+        lease.monthly_rent,
+        tenant?.security_deposit
+      );
+      const html = buildLeaseAgreementHTML({
+        landlordName: ownerName || 'Landlord',
+        tenantName: tenant?.full_name || 'Tenant',
+        propertyName: property?.name || 'Property',
+        propertyAddress: property ? `${property.address}, ${property.city}` : '—',
+        unitNumber: tenant?.unit_number || '—',
+        monthlyRent: lease.monthly_rent,
+        startDate: lease.start_date,
+        endDate: lease.end_date,
+        securityDeposit: depInfo?.amount ?? null,
+        agreementDate: lease.signed_at || lease.start_date,
+      });
 
-      if (lease.document_url) {
-        console.log('Downloading signed PDF from:', lease.document_url);
-        const filename = `Lease_Agreement_${lease.id.substring(0, 8)}.pdf`;
-        const localUri = `${FileSystem.documentDirectory}${filename}`;
-        const downloadResult = await FileSystem.downloadAsync(lease.document_url, localUri);
-        uri = downloadResult.uri;
-      } else {
-        const property = lease.properties;
-        const html = buildLeaseAgreementHTML({
-          landlordName: ownerName || 'Landlord',
-          tenantName: tenant?.full_name || 'Tenant',
-          propertyName: property?.name || 'Property',
-          propertyAddress: property ? `${property.address}, ${property.city}` : '—',
-          unitNumber: tenant?.unit_number || '—',
-          monthlyRent: lease.monthly_rent,
-          startDate: lease.start_date,
-          endDate: lease.end_date,
-          securityDeposit: null,
-          agreementDate: lease.signed_at || lease.start_date,
-        });
-
-        const printResult = await Print.printToFileAsync({ html, base64: false });
-        uri = printResult.uri;
-      }
-
+      const { uri } = await Print.printToFileAsync({ html, base64: false });
       const canShare = await Sharing.isAvailableAsync();
       if (canShare) {
         await Sharing.shareAsync(uri, {
@@ -164,8 +162,8 @@ export default function LeaseDocumentsScreen({ navigation }) {
         Alert.alert('Sharing Unavailable', 'PDF generated, but sharing services are not available on this device.');
       }
     } catch (err) {
-      console.error('Error sharing PDF:', err.message);
-      Alert.alert('Error', 'Could not share PDF. Please try again.');
+      console.error('Error generating PDF:', err.message);
+      Alert.alert('Error', 'Could not generate PDF. Please try again.');
     } finally {
       setGeneratingPdfId(null);
     }
@@ -191,6 +189,12 @@ export default function LeaseDocumentsScreen({ navigation }) {
             try {
               // Generate PDF as base64
               const property = lease.properties;
+              const depInfo = await getTenantDeposit(
+                tenant?.id,
+                tenant?.full_name,
+                lease.monthly_rent,
+                tenant?.security_deposit
+              );
               const html = buildLeaseAgreementHTML({
                 landlordName: ownerName || 'Landlord',
                 tenantName: tenant.full_name || 'Tenant',
@@ -200,7 +204,7 @@ export default function LeaseDocumentsScreen({ navigation }) {
                 monthlyRent: lease.monthly_rent,
                 startDate: lease.start_date,
                 endDate: lease.end_date,
-                securityDeposit: null,
+                securityDeposit: depInfo?.amount ?? null,
                 agreementDate: lease.signed_at || lease.start_date,
               });
 
@@ -382,14 +386,19 @@ export default function LeaseDocumentsScreen({ navigation }) {
         ListHeaderComponent={
           <View style={styles.searchRow}>
             <View style={styles.searchBox}>
-              <MaterialIcons name="search" size={18} color={colors.outline} style={{ marginRight: 8 }} />
+              <MaterialIcons name="search" size={20} color={colors.primary} style={{ marginRight: 8 }} />
               <TextInput
                 style={styles.searchInput}
                 value={query}
                 onChangeText={setQuery}
-                placeholder="Search by tenant or unit..."
-                placeholderTextColor={colors.outline}
+                placeholder="Search by tenant or unit (e.g. Arjun, 102)..."
+                placeholderTextColor={colors.onSurfaceVariant}
               />
+              {query.length > 0 && (
+                <TouchableOpacity onPress={() => setQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <MaterialIcons name="close" size={18} color={colors.onSurfaceVariant} />
+                </TouchableOpacity>
+              )}
             </View>
           </View>
         }
@@ -406,7 +415,7 @@ export default function LeaseDocumentsScreen({ navigation }) {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.surface,
@@ -428,10 +437,17 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.surfaceContainerHighest,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    backgroundColor: colors.surfaceContainerLowest,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: colors.outlineVariant,
+    paddingHorizontal: 14,
+    paddingVertical: Platform.OS === 'ios' ? 10 : 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 3,
+    elevation: 1,
   },
   searchInput: {
     flex: 1,

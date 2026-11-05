@@ -39,18 +39,16 @@ export default function CommunityScreen({ navigation }) {
       icon: 'mark_email_unread', // card box / folder tray / message tray
       screen: 'MessagesAlerts',
     },
-    {
-      id: 'ShipPlay',
-      title: 'Ship&Play',
-      description: 'Services offered by property partners',
-      icon: 'people', // group/people
-      screen: 'ShipPlay',
-    },
   ];
 
   return (
     <View style={styles.container}>
-      <ScreenHeader title="Community" hideLogo showBell />
+      <ScreenHeader
+        title="Community"
+        showBack
+        onBack={() => navigation.goBack()}
+        showBell
+      />
       <ScrollView
         contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 24 }]}
         showsVerticalScrollIndicator={false}

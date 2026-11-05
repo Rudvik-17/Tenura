@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,44 +6,51 @@ import {
   StyleSheet,
   TouchableOpacity,
   Alert,
-  Image,
+  ActivityIndicator,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
-import { colors } from '../../theme/colors';
+import { useTheme } from '../../context/ThemeContext';
 import { fonts } from '../../theme/typography';
 import ScreenHeader from '../../components/ScreenHeader';
 import { RateLimitedButton } from '../../components/RateLimitedButton';
 
 export default function MenuScreen({ navigation }) {
+  const { colors } = useTheme();
+  const styles = getStyles(colors);
   const insets = useSafeAreaInsets();
-  const { user, profile, clearRole } = useAuth();
+  const { user } = useAuth();
+
+  const [loading, setLoading] = useState(true);
+  const [ownerName, setOwnerName] = useState('');
   const [signingOut, setSigningOut] = useState(false);
 
-  const handleSettings = () => {
-    Alert.alert(
-      'App Settings',
-      'Settings panel is mock in this version.',
-      [{ text: 'OK' }]
-    );
-  };
+  useEffect(() => {
+    async function loadOwnerName() {
+      if (!user) return;
+      try {
+        const { data, error } = await supabase
+          .from('users')
+          .select('full_name')
+          .eq('id', user.id)
+          .single();
 
-  const handleSwitchRole = () => {
-    Alert.alert(
-      'Switch Role',
-      'This will take you back to the role selection screen.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Switch',
-          onPress: () => {
-            clearRole();
-          },
-        },
-      ]
-    );
+        if (error) throw error;
+        setOwnerName(data?.full_name || 'Property Owner');
+      } catch (err) {
+        console.error('Error loading owner name:', err.message);
+        setOwnerName('Property Owner');
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadOwnerName();
+  }, [user?.id]);
+
+  const handleSettings = () => {
+    navigation.navigate('AppSettings');
   };
 
   const handleSignOut = async () => {
@@ -68,36 +75,32 @@ export default function MenuScreen({ navigation }) {
     );
   };
 
-  const getInitials = () => {
-    if (profile?.full_name) {
-      return profile.full_name
-        .split(' ')
-        .filter(Boolean)
-        .slice(0, 2)
-        .map(n => n[0].toUpperCase())
-        .join('');
-    }
-    return user?.email?.substring(0, 2).toUpperCase() || '?';
-  };
+  if (loading) {
+    return (
+      <View style={styles.centered}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
 
   const menuItems = [
     {
-      id: 'edit_profile',
-      label: 'Edit Profile',
-      icon: 'person',
-      action: () => navigation.navigate('EditProfile'),
-    },
-    {
-      id: 'settings',
-      label: 'App Settings',
-      icon: 'settings',
-      action: handleSettings,
+      id: 'issues',
+      label: 'Resident Issues',
+      icon: 'report-problem',
+      action: () => navigation.navigate('ResidentIssues'),
     },
     {
       id: 'community',
       label: 'Community',
       icon: 'business',
-      action: () => navigation.navigate('Community'),
+      action: () => navigation.navigate('CommunityMain'),
+    },
+    {
+      id: 'leases',
+      label: 'Lease Documents',
+      icon: 'history-edu',
+      action: () => navigation.navigate('LeaseDocuments'),
     },
     {
       id: 'portfolio',
@@ -106,10 +109,10 @@ export default function MenuScreen({ navigation }) {
       action: () => navigation.navigate('Portfolio'),
     },
     {
-      id: 'leases',
-      label: 'Lease Documents',
-      icon: 'history-edu',
-      action: () => navigation.navigate('LeaseDocuments'),
+      id: 'settings',
+      label: 'App Settings',
+      icon: 'settings',
+      action: handleSettings,
     },
   ];
 
@@ -124,31 +127,12 @@ export default function MenuScreen({ navigation }) {
         contentContainerStyle={[styles.scrollContent, { flexGrow: 1, paddingBottom: insets.bottom + 24 }]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Profile Header - Interactive */}
-        <TouchableOpacity
-          style={styles.profileHeader}
-          onPress={() => navigation.navigate('EditProfile')}
-          activeOpacity={0.8}
-        >
-          <View style={styles.profileCardContent}>
-            {profile?.avatar_url ? (
-              <Image source={{ uri: profile.avatar_url }} style={styles.avatarImage} />
-            ) : (
-              <View style={styles.avatarPlaceholder}>
-                <Text style={styles.avatarPlaceholderText}>{getInitials()}</Text>
-              </View>
-            )}
-            <View style={styles.profileInfoText}>
-              <Text style={styles.ownerName}>{profile?.full_name || 'Property Owner'}</Text>
-              <Text style={styles.ownerEmail}>{user?.email || 'owner@estatelogic.com'}</Text>
-              {profile?.phone ? (
-                <Text style={styles.ownerPhone}>{profile.phone}</Text>
-              ) : null}
-            </View>
-            <MaterialIcons name="chevron-right" size={24} color={colors.outline} />
-          </View>
+        {/* Profile Header */}
+        <View style={styles.profileHeader}>
+          <Text style={styles.ownerName}>{ownerName}</Text>
+          <Text style={styles.ownerEmail}>{user?.email || 'owner@estatelogic.com'}</Text>
           <View style={styles.divider} />
-        </TouchableOpacity>
+        </View>
 
         {/* Menu Items List */}
         <View style={styles.menuList}>
@@ -168,16 +152,8 @@ export default function MenuScreen({ navigation }) {
         {/* Spacer to push options to bottom */}
         <View style={styles.spacer} />
 
-        {/* Switch Role and Logout */}
+        {/* Logout */}
         <View style={styles.bottomSection}>
-          <RateLimitedButton
-            style={styles.menuRow}
-            onPress={handleSwitchRole}
-            activeOpacity={0.7}
-          >
-            <MaterialIcons name="swap-horiz" size={22} color={colors.primary} />
-            <Text style={[styles.menuLabel, { color: colors.primary }]}>Switch Role</Text>
-          </RateLimitedButton>
 
           <RateLimitedButton
             style={styles.menuRow}
@@ -196,9 +172,15 @@ export default function MenuScreen({ navigation }) {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors) => StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: colors.surface,
+  },
+  centered: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: colors.surface,
   },
   scroll: {
@@ -210,37 +192,7 @@ const styles = StyleSheet.create({
   },
   profileHeader: {
     paddingVertical: 12,
-  },
-  profileCardContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-  },
-  avatarImage: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    borderWidth: 2,
-    borderColor: colors.primary,
-  },
-  avatarPlaceholder: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: colors.primaryContainer,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: colors.primary,
-  },
-  avatarPlaceholderText: {
-    fontFamily: fonts.manropeBold,
-    fontSize: 20,
-    color: colors.onPrimaryContainer,
-  },
-  profileInfoText: {
-    flex: 1,
-    gap: 2,
+    gap: 4,
   },
   ownerName: {
     fontFamily: fonts.manropeBold,
@@ -251,12 +203,6 @@ const styles = StyleSheet.create({
     fontFamily: fonts.interRegular,
     fontSize: 14,
     color: colors.onSurfaceVariant,
-  },
-  ownerPhone: {
-    fontFamily: fonts.interRegular,
-    fontSize: 12,
-    color: colors.outline,
-    marginTop: 2,
   },
   divider: {
     height: 1,
@@ -280,7 +226,6 @@ const styles = StyleSheet.create({
   },
   spacer: {
     flex: 1,
-    minHeight: 40,
   },
   bottomSection: {
     marginTop: 24,

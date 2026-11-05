@@ -33,7 +33,15 @@ yarn-error.*
 # local env files
 .env
 .env.local
+.env.production
 .env*.local
+
+# AI agent config
+.agent
+.agent/
+.agents/
+agent.yaml
+.vscode/
 
 # typescript
 *.tsbuildinfo

@@ -25,20 +25,46 @@ import ScreenHeader from '../../components/ScreenHeader';
 import StatusChip from '../../components/StatusChip';
 import PrimaryButton from '../../components/PrimaryButton';
 import { buildReceiptHTML } from '../../lib/receiptHTML';
+import { getTenantUtilityBills } from '../../lib/utilityBills';
+import { scheduleRentReminder } from '../../lib/notifications';
 import { RateLimitedButton } from '../../components/RateLimitedButton';
+import {
+  fetchCurrentRentObligation,
+  verifyPaymentReceiptEligibility,
+} from '../../services/razorpayService';
 
 const METHOD_LABELS = {
+  razorpay: 'Razorpay Secure Checkout',
+  upi_direct: 'Direct UPI (Owner Verified)',
+  upi: 'UPI',
   gpay: 'Google Pay',
   phonepe: 'PhonePe',
   paytm: 'Paytm',
 };
 
-const statusVariant = (status) =>
-  status === 'paid' ? 'active' : status === 'overdue' ? 'urgent' : 'pending';
+const statusVariant = (status, verificationStatus) => {
+  if (verificationStatus === 'legacy_unverified' || verificationStatus === 'unverified') {
+    return 'pending';
+  }
+  if (status === 'paid') return 'active';
+  if (status === 'overdue' || status === 'reversed') return 'urgent';
+  return 'pending';
+};
+
+const statusLabel = (status, verificationStatus) => {
+  if (verificationStatus === 'legacy_unverified') return 'Legacy Unverified';
+  if (status === 'under_review') return 'Under Review';
+  if (status === 'partially_refunded') return 'Partial Refund';
+  if (status === 'refunded') return 'Refunded';
+  if (status === 'reversed') return 'Reversed';
+  if (status === 'paid') return 'Paid';
+  if (status === 'overdue') return 'Overdue';
+  return 'Pending';
+};
 
 export default function PaymentHistoryScreen({ navigation }) {
-  const { theme, colors } = useTheme();
-  const styles = getStyles(colors, theme);
+  const { theme, colors, isDark } = useTheme();
+  const styles = getStyles(colors, theme, isDark);
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
 
@@ -50,6 +76,7 @@ export default function PaymentHistoryScreen({ navigation }) {
   const [refreshing, setRefreshing] = useState(false);
   const [tenantInfo, setTenantInfo] = useState(null);
   const [activeLease, setActiveLease] = useState(null);
+  const [utilityBills, setUtilityBills] = useState(null);
   const downloadingRef = useRef(new Set());
   const [downloadingIds, setDownloadingIds] = useState(new Set());
 
@@ -127,6 +154,9 @@ export default function PaymentHistoryScreen({ navigation }) {
     setError(null);
     setLoading(true);
 
+    // Ensure server-owned current month rent obligation is derived before reading payments
+    const { data: canonicalObligation } = await fetchCurrentRentObligation().catch(() => ({}));
+
     const { data: tenantRows, error: tenantError } = await supabase
       .from('tenants')
       .select('id, full_name, unit_number, properties(name)')
@@ -142,12 +172,20 @@ export default function PaymentHistoryScreen({ navigation }) {
 
     const tenant = tenantRows?.[0] ?? null;
     if (!tenant) {
+      const fallbackUtilities = await getTenantUtilityBills(`tenant-${user.id}`, '101', 'Bangalore');
+      setUtilityBills(fallbackUtilities);
       setPayments([]);
       setLoading(false);
       setRefreshing(false);
       return;
     }
     setTenantInfo(tenant);
+    const loadedUtilities = await getTenantUtilityBills(
+      tenant.id,
+      tenant.unit_number || '101',
+      'Bangalore'
+    );
+    setUtilityBills(loadedUtilities);
 
     // Get active lease & payments in parallel
     const [leaseRes, paymentsRes] = await Promise.all([
@@ -181,9 +219,11 @@ export default function PaymentHistoryScreen({ navigation }) {
     
     const allPayments = paymentsRes.data ?? [];
     setPayments(allPayments);
-    setPendingPayment(
-      allPayments.find(p => p.status === 'pending' || p.status === 'overdue') ?? null
-    );
+    // Prioritize the canonical server-derived obligation order (earliest overdue/actionable first)
+    const earliestPending = canonicalObligation?.payment
+      ?? [...allPayments].reverse().find(p => ['pending', 'overdue', 'under_review', 'reversed'].includes(p.status))
+      ?? null;
+    setPendingPayment(earliestPending);
     
     setLoading(false);
     setRefreshing(false);
@@ -201,11 +241,24 @@ export default function PaymentHistoryScreen({ navigation }) {
     setDownloadingIds(new Set(downloadingRef.current));
 
     try {
+      const { data: eligibility } = await verifyPaymentReceiptEligibility(item.id);
+      if (!eligibility?.eligible || !eligibility?.payment) {
+        Alert.alert(
+          'Receipt Unavailable',
+          eligibility?.reason || 'Paid receipts are only issued after confirmed settlement.'
+        );
+        return;
+      }
+
+      const verified = eligibility.payment;
       const html = buildReceiptHTML({
-        txnId: item.transaction_id ?? item.id,
-        amount: item.amount,
-        method: item.payment_method,
-        paidAt: item.paid_at ?? item.due_date,
+        txnId: verified.transaction_id ?? verified.razorpay_payment_id ?? verified.utr_number ?? verified.id,
+        amount: verified.amount,
+        refundedAmount: verified.refunded_amount ?? 0,
+        status: verified.status,
+        verificationStatus: verified.verification_status,
+        method: verified.payment_method,
+        paidAt: verified.paid_at ?? item.due_date,
         tenantName: tenantInfo?.full_name ?? 'Tenant',
         propertyName: tenantInfo?.properties?.name ?? 'Property',
         unitNumber: tenantInfo?.unit_number ?? '—',
@@ -219,8 +272,8 @@ export default function PaymentHistoryScreen({ navigation }) {
           UTI: 'com.adobe.pdf',
         });
       }
-    } catch {
-      Alert.alert('Error', 'Could not generate receipt. Please try again.');
+    } catch (err) {
+      Alert.alert('Error', err?.message || 'Could not generate receipt. Please try again.');
     } finally {
       downloadingRef.current.delete(item.id);
       setDownloadingIds(new Set(downloadingRef.current));
@@ -343,6 +396,18 @@ export default function PaymentHistoryScreen({ navigation }) {
         setAutoPayEnabled(enabled);
         setAutoPayDay(day);
         setAutoPayMethod(methodId || '');
+
+        if (enabled) {
+          const now = new Date();
+          let targetDate = new Date(now.getFullYear(), now.getMonth(), day, 9, 0, 0);
+          if (targetDate.getTime() <= now.getTime()) {
+            targetDate = new Date(now.getFullYear(), now.getMonth() + 1, day, 9, 0, 0);
+          }
+          scheduleRentReminder({
+            amount: activeLease?.monthly_rent || 15000,
+            dueDate: targetDate.toISOString(),
+          });
+        }
       }
     } catch (e) {
       console.log('Error executing upsert query:', e);
@@ -385,8 +450,7 @@ export default function PaymentHistoryScreen({ navigation }) {
     );
   }
 
-  // Filter out paid payments for the Ledger history
-  const paidPayments = payments.filter(p => p.status === 'paid');
+  const ledgerPayments = payments;
 
   return (
     <View style={styles.container}>
@@ -403,7 +467,13 @@ export default function PaymentHistoryScreen({ navigation }) {
         <View style={styles.heroCard}>
           <View style={styles.heroLeft}>
             <Text style={styles.heroStatusLabel}>
-              {pendingPayment ? 'BALANCE DUE' : 'NO BALANCE DUE'}
+              {pendingPayment
+                ? pendingPayment.status === 'under_review'
+                  ? 'UNDER REVIEW (OUTSTANDING)'
+                  : pendingPayment.status === 'reversed'
+                    ? 'REVERSED — BALANCE DUE'
+                    : 'BALANCE DUE'
+                : 'NO BALANCE DUE'}
             </Text>
             <Text style={styles.heroAmount}>
               ₹{pendingPayment ? Number(pendingPayment.amount).toLocaleString('en-IN') : '0.00'}
@@ -420,14 +490,132 @@ export default function PaymentHistoryScreen({ navigation }) {
             <TouchableOpacity 
               style={styles.heroPrimaryBtn}
               onPress={() => {
-                navigation.navigate('RentPayment');
+                navigation.navigate('RentPayment', { paymentId: pendingPayment?.id });
               }}
             >
               <Text style={styles.heroPrimaryBtnText}>
-                Make Payment
+                {pendingPayment?.status === 'under_review' ? 'View Status' : 'Make Payment'}
               </Text>
             </TouchableOpacity>
           </View>
+        </View>
+
+        {/* PAYMENT OPTIONS (Single icon & card for each: Rent, Water, Electricity) */}
+        <View style={styles.paymentOptionsSection}>
+          <View style={styles.paymentOptionsHeader}>
+            <Text style={styles.paymentOptionsTitle}>Payment Options</Text>
+            <Text style={styles.paymentOptionsSub}>Select a bill to pay directly</Text>
+          </View>
+
+          {/* 1. Rent Payment Option */}
+          <TouchableOpacity
+            style={styles.paymentCategoryCard}
+            activeOpacity={0.8}
+            onPress={() => navigation.navigate('RentPayment', { paymentId: pendingPayment?.id })}
+          >
+            <View style={[styles.categoryIconCircle, { backgroundColor: isDark ? 'rgba(129, 140, 248, 0.18)' : 'rgba(79, 70, 229, 0.12)' }]}>
+              <MaterialIcons name="home" size={24} color={colors.primary} />
+            </View>
+
+            <View style={styles.categoryInfo}>
+              <View style={styles.categoryTitleRow}>
+                <Text style={styles.categoryName}>Rent Payment</Text>
+                <StatusChip
+                  label={
+                    pendingPayment
+                      ? pendingPayment.status === 'paid'
+                        ? 'Paid ✓'
+                        : pendingPayment.status === 'under_review'
+                        ? 'Under Review'
+                        : 'Due'
+                      : 'Paid ✓'
+                  }
+                  variant={pendingPayment && pendingPayment.status !== 'paid' ? 'pending' : 'active'}
+                />
+              </View>
+              <Text style={styles.categorySub} numberOfLines={1}>
+                {tenantInfo?.unit_number ? `Unit ${tenantInfo.unit_number} · Monthly Rent` : 'Monthly House Rent'}
+              </Text>
+              <Text style={styles.categoryAmount}>
+                ₹{Number(pendingPayment?.amount ?? activeLease?.monthly_rent ?? 15000).toLocaleString('en-IN')}
+              </Text>
+            </View>
+
+            <View style={styles.categoryAction}>
+              <View style={styles.categoryPayBtn}>
+                <Text style={styles.categoryPayBtnText}>Pay Rent</Text>
+                <MaterialIcons name="arrow-forward" size={14} color={colors.primary} />
+              </View>
+            </View>
+          </TouchableOpacity>
+
+          {/* 2. Water Bill Option */}
+          <TouchableOpacity
+            style={styles.paymentCategoryCard}
+            activeOpacity={0.8}
+            onPress={() => navigation.navigate('UtilityBills', { initialBillType: 'water' })}
+          >
+            <View style={[styles.categoryIconCircle, { backgroundColor: isDark ? 'rgba(56, 189, 248, 0.18)' : 'rgba(14, 165, 233, 0.12)' }]}>
+              <MaterialIcons name="water-drop" size={22} color={isDark ? '#38BDF8' : '#0284C7'} />
+            </View>
+
+            <View style={styles.categoryInfo}>
+              <View style={styles.categoryTitleRow}>
+                <Text style={styles.categoryName}>Water Bill</Text>
+                <StatusChip
+                  label={utilityBills?.water?.status === 'paid' ? 'Paid ✓' : 'Due'}
+                  variant={utilityBills?.water?.status === 'paid' ? 'active' : 'pending'}
+                />
+              </View>
+              <Text style={styles.categorySub} numberOfLines={1}>
+                {utilityBills?.water?.departmentShortName || 'BWSSB Water Dept'}
+              </Text>
+              <Text style={styles.categoryAmount}>
+                ₹{Number(utilityBills?.water?.amount ?? 580).toLocaleString('en-IN')}
+              </Text>
+            </View>
+
+            <View style={styles.categoryAction}>
+              <View style={styles.categoryPayBtn}>
+                <Text style={styles.categoryPayBtnText}>Pay Bill</Text>
+                <MaterialIcons name="arrow-forward" size={14} color={colors.primary} />
+              </View>
+            </View>
+          </TouchableOpacity>
+
+          {/* 3. Electricity Bill Option */}
+          <TouchableOpacity
+            style={styles.paymentCategoryCard}
+            activeOpacity={0.8}
+            onPress={() => navigation.navigate('UtilityBills', { initialBillType: 'electricity' })}
+          >
+            <View style={[styles.categoryIconCircle, { backgroundColor: isDark ? 'rgba(250, 204, 21, 0.18)' : 'rgba(245, 158, 11, 0.12)' }]}>
+              <MaterialIcons name="bolt" size={24} color={isDark ? '#FACC15' : '#D97706'} />
+            </View>
+
+            <View style={styles.categoryInfo}>
+              <View style={styles.categoryTitleRow}>
+                <Text style={styles.categoryName}>Electricity Bill</Text>
+                <StatusChip
+                  label={utilityBills?.electricity?.status === 'paid' ? 'Paid ✓' : 'Due'}
+                  variant={utilityBills?.electricity?.status === 'paid' ? 'active' : 'pending'}
+                />
+              </View>
+              <Text style={styles.categorySub} numberOfLines={1}>
+                {utilityBills?.electricity?.departmentShortName || 'BESCOM Electricity Dept'}
+              </Text>
+              <Text style={styles.categoryAmount}>
+                ₹{Number(utilityBills?.electricity?.amount ?? 1450).toLocaleString('en-IN')}
+              </Text>
+            </View>
+
+            <View style={styles.categoryAction}>
+              <View style={styles.categoryPayBtn}>
+                <Text style={styles.categoryPayBtnText}>Pay Bill</Text>
+                <MaterialIcons name="arrow-forward" size={14} color={colors.primary} />
+              </View>
+            </View>
+          </TouchableOpacity>
         </View>
 
         {/* MENU OPTIONS (Ledger, Wallet, Auto-Payments) */}
@@ -457,46 +645,80 @@ export default function PaymentHistoryScreen({ navigation }) {
           {showLedger && (
             <View style={styles.ledgerExpanded}>
               <Text style={styles.ledgerHeaderTitle}>Transaction History</Text>
-              {paidPayments.length === 0 ? (
+              {ledgerPayments.length === 0 ? (
                 <View style={styles.emptyLedger}>
                   <MaterialIcons name="receipt" size={32} color={colors.outline} />
-                  <Text style={styles.emptyLedgerText}>No paid transaction history yet.</Text>
+                  <Text style={styles.emptyLedgerText}>No rent ledger records yet.</Text>
                 </View>
               ) : (
-                paidPayments.map((item) => (
-                  <View key={item.id} style={styles.paymentRow}>
-                    <View style={styles.paymentIconBg}>
-                      <MaterialIcons name="check-circle" size={18} color={colors.tertiaryFixedDim} />
-                    </View>
-                    <View style={styles.paymentInfo}>
-                      <Text style={styles.paymentAmount}>
-                        ₹{Number(item.amount).toLocaleString('en-IN')}
-                      </Text>
-                      <Text style={styles.paymentMeta}>
-                        Due {formatDate(item.due_date)} · Paid {formatDate(item.paid_at)}
-                      </Text>
-                      {item.payment_method ? (
-                        <Text style={styles.paymentMethod}>
-                          {METHOD_LABELS[item.payment_method] ?? item.payment_method}
+                ledgerPayments.map((item) => {
+                  const canDownloadReceipt =
+                    (item.status === 'paid' || item.status === 'partially_refunded') &&
+                    (item.verification_status === 'verified_provider' ||
+                      item.verification_status === 'verified_owner');
+                  const netAmount = Math.max(
+                    0,
+                    Number(item.amount || 0) - Number(item.refunded_amount || 0)
+                  );
+                  return (
+                    <View key={item.id} style={styles.paymentRow}>
+                      <View style={styles.paymentIconBg}>
+                        <MaterialIcons
+                          name={
+                            item.status === 'paid' && item.verification_status !== 'legacy_unverified'
+                              ? 'check-circle'
+                              : item.status === 'under_review'
+                                ? 'hourglass-top'
+                                : 'receipt'
+                          }
+                          size={18}
+                          color={
+                            item.status === 'paid' && item.verification_status !== 'legacy_unverified'
+                              ? colors.tertiaryFixedDim
+                              : colors.primary
+                          }
+                        />
+                      </View>
+                      <View style={styles.paymentInfo}>
+                        <Text style={styles.paymentAmount}>
+                          ₹{Number(item.amount).toLocaleString('en-IN')}
+                          {Number(item.refunded_amount || 0) > 0
+                            ? ` (Net ₹${netAmount.toLocaleString('en-IN')})`
+                            : ''}
                         </Text>
-                      ) : null}
+                        <Text style={styles.paymentMeta}>
+                          Due {formatDate(item.due_date)}
+                          {item.paid_at ? ` · Paid ${formatDate(item.paid_at)}` : ''}
+                        </Text>
+                        {item.payment_method ? (
+                          <Text style={styles.paymentMethod}>
+                            {METHOD_LABELS[item.payment_method] ?? item.payment_method}
+                            {item.utr_number ? ` · UTR: ${item.utr_number}` : ''}
+                          </Text>
+                        ) : null}
+                      </View>
+                      <View style={styles.paidActions}>
+                        <StatusChip
+                          label={statusLabel(item.status, item.verification_status)}
+                          variant={statusVariant(item.status, item.verification_status)}
+                        />
+                        {canDownloadReceipt ? (
+                          <RateLimitedButton
+                            style={styles.receiptBtn}
+                            onPress={() => handleDownloadReceipt(item)}
+                            disabled={downloadingIds.has(item.id)}
+                          >
+                            {downloadingIds.has(item.id) ? (
+                              <ActivityIndicator size={14} color={colors.primary} />
+                            ) : (
+                              <MaterialIcons name="receipt" size={16} color={colors.primary} />
+                            )}
+                          </RateLimitedButton>
+                        ) : null}
+                      </View>
                     </View>
-                    <View style={styles.paidActions}>
-                      <StatusChip label="paid" variant="active" />
-                      <RateLimitedButton
-                        style={styles.receiptBtn}
-                        onPress={() => handleDownloadReceipt(item)}
-                        disabled={downloadingIds.has(item.id)}
-                      >
-                        {downloadingIds.has(item.id) ? (
-                          <ActivityIndicator size={14} color={colors.primary} />
-                        ) : (
-                          <MaterialIcons name="receipt" size={16} color={colors.primary} />
-                        )}
-                      </RateLimitedButton>
-                    </View>
-                  </View>
-                ))
+                  );
+                })
               )}
             </View>
           )}
@@ -534,8 +756,25 @@ export default function PaymentHistoryScreen({ navigation }) {
               <MaterialIcons name="autorenew" size={20} color={colors.primary} />
             </View>
             <View style={styles.menuInfo}>
-              <Text style={styles.menuTitle}>Auto-Payments</Text>
-              <Text style={styles.menuSubtitle}>Set up payments to give you peace of mind.</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={styles.menuTitle}>Auto-Payments</Text>
+                <View style={[
+                  styles.autoPayBadge,
+                  autoPayEnabled ? styles.autoPayBadgeActive : styles.autoPayBadgeInactive
+                ]}>
+                  <Text style={[
+                    styles.autoPayBadgeText,
+                    autoPayEnabled ? styles.autoPayBadgeTextActive : styles.autoPayBadgeTextInactive
+                  ]}>
+                    {autoPayEnabled ? `Reminder: ${autoPayDay}th` : 'Off'}
+                  </Text>
+                </View>
+              </View>
+              <Text style={styles.menuSubtitle}>
+                {autoPayEnabled
+                  ? `Scheduled reminder on the ${autoPayDay}th with 1-tap checkout`
+                  : 'Configure monthly rent reminders and payment preferences'}
+              </Text>
             </View>
             <MaterialIcons name="keyboard-arrow-right" size={24} color={colors.outline} />
           </TouchableOpacity>
@@ -769,9 +1008,9 @@ export default function PaymentHistoryScreen({ navigation }) {
             <View style={styles.autoPayBody}>
               <View style={styles.toggleRow}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.toggleLabel}>Enable Auto-Pay</Text>
+                  <Text style={styles.toggleLabel}>Monthly Rent Reminder & 1-Tap Pay</Text>
                   <Text style={styles.toggleSub}>
-                    Deducts due rent automatically every month.
+                    Sends an alert on your chosen day with 1-tap checkout.
                   </Text>
                 </View>
                 <Switch
@@ -843,14 +1082,11 @@ export default function PaymentHistoryScreen({ navigation }) {
                   <View style={styles.summaryBox}>
                     <MaterialIcons name="info" size={16} color={colors.primary} />
                     <Text style={styles.summaryBoxText}>
-                      Every month on the <Text style={{ fontFamily: fonts.interBold }}>{autoPayDay}th</Text>, a payment of{' '}
+                      Every month on the <Text style={{ fontFamily: fonts.interBold }}>{autoPayDay}th</Text>, you will receive a scheduled 1-tap checkout prompt for{' '}
                       <Text style={{ fontFamily: fonts.interBold, color: colors.tertiaryFixedDim }}>
                         ₹{Number(activeLease?.monthly_rent ?? 15000).toLocaleString('en-IN')}
                       </Text>{' '}
-                      will be processed automatically using{' '}
-                      <Text style={{ fontFamily: fonts.interBold }}>
-                        {selectedMethodObj ? selectedMethodObj.label : 'Saved Method'}
-                      </Text>.
+                      with your preferred method ({selectedMethodObj ? selectedMethodObj.label : 'Saved Method'}) pre-selected.
                     </Text>
                   </View>
                 </View>
@@ -876,7 +1112,7 @@ export default function PaymentHistoryScreen({ navigation }) {
   );
 }
 
-const getStyles = (colors, theme) => StyleSheet.create({
+const getStyles = (colors, theme, isDark) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
   centered: {
     flex: 1, alignItems: 'center', justifyContent: 'center',
@@ -956,7 +1192,92 @@ const getStyles = (colors, theme) => StyleSheet.create({
     color: theme === 'dark' ? 'rgba(255, 255, 255, 0.7)' : 'rgba(63, 15, 2, 0.6)',
   },
 
-  // OPTION MENU ITEMS
+  // PAYMENT OPTIONS SECTION (Rent, Water, Electricity)
+  paymentOptionsSection: {
+    marginHorizontal: 16,
+    marginTop: 18,
+    marginBottom: 8,
+  },
+  paymentOptionsHeader: {
+    marginBottom: 12,
+  },
+  paymentOptionsTitle: {
+    fontFamily: fonts.manropeBold,
+    fontSize: 17,
+    color: colors.onSurface,
+  },
+  paymentOptionsSub: {
+    fontFamily: fonts.interRegular,
+    fontSize: 12,
+    color: colors.onSurfaceVariant,
+    marginTop: 2,
+  },
+  paymentCategoryCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surfaceContainerLowest,
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: isDark ? colors.outlineVariant : 'rgba(203, 213, 225, 0.6)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: isDark ? 0.25 : 0.04,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  categoryIconCircle: {
+    width: 46,
+    height: 46,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14,
+  },
+  categoryInfo: {
+    flex: 1,
+  },
+  categoryTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 3,
+  },
+  categoryName: {
+    fontFamily: fonts.manropeBold,
+    fontSize: 15,
+    color: colors.onSurface,
+  },
+  categorySub: {
+    fontFamily: fonts.interRegular,
+    fontSize: 12,
+    color: colors.outline,
+    marginBottom: 4,
+  },
+  categoryAmount: {
+    fontFamily: fonts.manropeBold,
+    fontSize: 17,
+    color: colors.onSurface,
+    letterSpacing: -0.3,
+  },
+  categoryAction: {
+    marginLeft: 8,
+  },
+  categoryPayBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: isDark ? 'rgba(129, 140, 248, 0.15)' : 'rgba(79, 70, 229, 0.08)',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 16,
+  },
+  categoryPayBtnText: {
+    fontFamily: fonts.interSemiBold,
+    fontSize: 12,
+    color: colors.primary,
+  },
   menuContainer: {
     marginHorizontal: 16,
     marginTop: 12,
@@ -998,6 +1319,27 @@ const getStyles = (colors, theme) => StyleSheet.create({
     fontSize: 12,
     color: colors.onSurfaceVariant,
     lineHeight: 16,
+  },
+  autoPayBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  autoPayBadgeActive: {
+    backgroundColor: `${colors.tertiaryFixedDim}25`,
+  },
+  autoPayBadgeInactive: {
+    backgroundColor: `${colors.outlineVariant}30`,
+  },
+  autoPayBadgeText: {
+    fontFamily: fonts.interSemiBold,
+    fontSize: 10.5,
+  },
+  autoPayBadgeTextActive: {
+    color: colors.tertiaryFixedDim,
+  },
+  autoPayBadgeTextInactive: {
+    color: colors.onSurfaceVariant,
   },
   menuDivider: {
     height: 1,

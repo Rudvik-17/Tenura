@@ -17,6 +17,7 @@ import { useTheme } from '../../context/ThemeContext';
 import { fonts } from '../../theme/typography';
 import ScreenHeader from '../../components/ScreenHeader';
 import { RateLimitedButton } from '../../components/RateLimitedButton';
+import { getTenantDeposit } from '../../lib/securityDeposit';
 
 export default function MenuScreen({ navigation }) {
   const { colors, theme, toggleTheme } = useTheme();
@@ -102,6 +103,28 @@ export default function MenuScreen({ navigation }) {
     );
   };
 
+  const handleSecurityDeposit = async () => {
+    if (!tenantProfile) {
+      Alert.alert('Security Deposit', 'No tenant details available.');
+      return;
+    }
+    const dep = await getTenantDeposit(
+      tenantProfile.id,
+      tenantProfile.full_name,
+      lease?.monthly_rent ?? 0,
+      tenantProfile.security_deposit
+    );
+    const deductionsText = dep.deductions?.length > 0
+      ? `\n\nMove-Out Deductions (Paint/Repairs):\n${dep.deductions.map(d => `• ${d.title}: -₹${Number(d.amount).toLocaleString('en-IN')}`).join('\n')}\n\nNet Refund to You: ₹${Number(dep.netRefund).toLocaleString('en-IN')}`
+      : '\n\nNo move-out deductions recorded.';
+
+    Alert.alert(
+      'Security Deposit Details',
+      `Amount: ₹${Number(dep.amount).toLocaleString('en-IN')}\nStatus: ${dep.status === 'collected' ? 'Collected Upfront (Before Handover)' : 'Pending Advance Payment'}${deductionsText}\n\nNote: The security deposit was set by your landlord and taken in advance before giving the house. It is refundable when vacating after damage and paint inspection.`,
+      [{ text: 'Close' }]
+    );
+  };
+
   const handleLeaseOptions = () => {
     if (lease) {
       navigation.navigate('Dashboard', {
@@ -168,13 +191,19 @@ export default function MenuScreen({ navigation }) {
       id: 'community',
       label: 'Community',
       icon: 'apartment',
-      action: () => navigation.navigate('Community'),
+      action: () => navigation.navigate('CommunityMain'),
     },
     {
       id: 'payments',
       label: 'Payments',
       icon: 'credit-card',
       action: () => navigation.navigate('Payments'),
+    },
+    {
+      id: 'utility_bills',
+      label: 'Water & Electricity Bills',
+      icon: 'bolt',
+      action: () => navigation.navigate('Payments', { screen: 'UtilityBills' }),
     },
     {
       id: 'apartment',
@@ -193,6 +222,12 @@ export default function MenuScreen({ navigation }) {
       label: 'Lease Options',
       icon: 'history-edu',
       action: handleLeaseOptions,
+    },
+    {
+      id: 'deposit',
+      label: 'Security Deposit',
+      icon: 'shield',
+      action: handleSecurityDeposit,
     },
     {
       id: 'feedback',

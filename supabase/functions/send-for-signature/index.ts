@@ -192,12 +192,44 @@ serve(async (req) => {
       )
     }
 
+    // 4A: Initialize Supabase client and verify lease record before hitting DocuSign
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') || ''
+    const supabaseServiceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
+    const supabase = createClient(supabaseUrl, supabaseServiceRoleKey)
+
+    const { data: lease, error: fetchErr } = await supabase
+      .from('leases')
+      .select('id, docusign_envelope_id, docusign_status, status')
+      .eq('id', leaseId)
+      .maybeSingle()
+
+    if (fetchErr || !lease) {
+      return new Response(
+        JSON.stringify({ error: `Lease with ID ${leaseId} not found in database.` }),
+        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Block duplicate envelopes if an active envelope is already in flight or signed
+    const activeStatuses = ['sent', 'delivered', 'completed', 'signed', 'created']
+    if (lease.docusign_envelope_id && activeStatuses.includes(lease.docusign_status || '')) {
+      console.warn(`Blocked duplicate envelope creation for lease ${leaseId}. Existing envelope: ${lease.docusign_envelope_id} (status: ${lease.docusign_status})`)
+      return new Response(
+        JSON.stringify({
+          error: `An active DocuSign envelope (${lease.docusign_envelope_id}) is already in flight with status '${lease.docusign_status}'. Duplicate envelope creation blocked.`,
+          envelopeId: lease.docusign_envelope_id,
+          status: lease.docusign_status,
+        }),
+        { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
     console.log('DOCUSIGN_INTEGRATION_KEY length:', DOCUSIGN_INTEGRATION_KEY.length)
     console.log('DOCUSIGN_ACCOUNT_ID length:', DOCUSIGN_ACCOUNT_ID.length)
     console.log('DOCUSIGN_USER_ID length:', DOCUSIGN_USER_ID.length)
     console.log('DOCUSIGN_PRIVATE_KEY length:', DOCUSIGN_PRIVATE_KEY.length)
 
-    // 1. Authenticate with DocuSign via Basic Auth (client_credentials)
+    // 1. Authenticate with DocuSign via JWT Bearer Grant
     console.log('Authenticating with DocuSign...')
     const accessToken = await getAccessToken()
 
@@ -207,9 +239,6 @@ serve(async (req) => {
     console.log(`Envelope created: ${envelopeId}`)
 
     // 3. Update the lease record in Supabase
-    const supabaseUrl = Deno.env.get('SUPABASE_URL') || ''
-    const supabaseServiceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
-    const supabase = createClient(supabaseUrl, supabaseServiceRoleKey)
 
     const { error: dbError } = await supabase
       .from('leases')

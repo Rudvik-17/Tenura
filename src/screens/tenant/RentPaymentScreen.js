@@ -206,6 +206,14 @@ export default function RentPaymentScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
 
+  const handleBack = () => {
+    if (navigation?.canGoBack && navigation.canGoBack()) {
+      navigation.goBack();
+    } else {
+      navigation.navigate('PaymentHistory');
+    }
+  };
+
   const targetParamPaymentId = route?.params?.paymentId ?? null;
   const [tenantPhone, setTenantPhone] = useState('');
   const [lease, setLease] = useState(null);
@@ -622,13 +630,20 @@ export default function RentPaymentScreen({ navigation, route }) {
 
   if (error) {
     return (
-      <View style={styles.centered}>
-        <MaterialIcons name="error-outline" size={40} color={colors.error} />
-        <Text style={styles.errorTitle}>Unable to load payment</Text>
-        <Text style={styles.errorMsg}>{error}</Text>
-        <RateLimitedButton style={styles.retryBtn} onPress={fetchPayment}>
-          <Text style={styles.retryText}>Retry</Text>
-        </RateLimitedButton>
+      <View style={styles.container}>
+        <ScreenHeader
+          title="Rent Payment"
+          showBack
+          onBack={handleBack}
+        />
+        <View style={styles.centered}>
+          <MaterialIcons name="error-outline" size={40} color={colors.error} />
+          <Text style={styles.errorTitle}>Unable to load payment</Text>
+          <Text style={styles.errorMsg}>{error}</Text>
+          <RateLimitedButton style={styles.retryBtn} onPress={fetchPayment}>
+            <Text style={styles.retryText}>Retry</Text>
+          </RateLimitedButton>
+        </View>
       </View>
     );
   }
@@ -636,7 +651,11 @@ export default function RentPaymentScreen({ navigation, route }) {
   if (notSetUp) {
     return (
       <View style={styles.container}>
-        <ScreenHeader title="Payments" showBell />
+        <ScreenHeader
+          title="Rent Payment"
+          showBack
+          onBack={handleBack}
+        />
         <View style={styles.centered}>
           <MaterialIcons name="home" size={48} color={colors.outline} />
           <Text style={styles.noDueTitle}>Account not set up</Text>
@@ -651,7 +670,11 @@ export default function RentPaymentScreen({ navigation, route }) {
   if (noActiveLease) {
     return (
       <View style={styles.container}>
-        <ScreenHeader title="Payments" showBell />
+        <ScreenHeader
+          title="Rent Payment"
+          showBack
+          onBack={handleBack}
+        />
         <View style={styles.centered}>
           <MaterialIcons name="description" size={48} color={colors.outline} />
           <Text style={styles.noDueTitle}>No active lease</Text>
@@ -666,7 +689,11 @@ export default function RentPaymentScreen({ navigation, route }) {
   if (!payment) {
     return (
       <View style={styles.container}>
-        <ScreenHeader title="Payments" showBell />
+        <ScreenHeader
+          title="Rent Payment"
+          showBack
+          onBack={handleBack}
+        />
         <View style={styles.centered}>
           <MaterialIcons name="check-circle" size={48} color={colors.tertiaryFixedDim} />
           <Text style={styles.noDueTitle}>No payment due</Text>
@@ -704,7 +731,11 @@ export default function RentPaymentScreen({ navigation, route }) {
 
   return (
     <View style={styles.container}>
-      <ScreenHeader title="Payments" showBell />
+      <ScreenHeader
+        title="Rent Payment"
+        showBack
+        onBack={handleBack}
+      />
       <ScrollView
         contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
         showsVerticalScrollIndicator={false}
